@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub学习平台</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>GitHub学习平台</h1>
+            <div class="auth-section">
+                <input type="text" id="github-token" placeholder="GitHub Token" style="width: 200px;">
+                <input type="text" id="openai-api-key" placeholder="通义千问API Key" style="width: 200px;">
+                <input type="text" id="repo-owner" placeholder="仓库所有者" style="width: 150px;">
+                <input type="text" id="repo-name" placeholder="仓库名称" style="width: 150px;">
+                <input type="text" id="proxy-url" placeholder="代理服务器地址" style="width: 200px;">
+                <button id="save-config">保存配置</button>
+            </div>
+        </header>
+
+        <main>
+            <div class="left-panel">
+                <div class="menu-section">
+                    <h3>功能菜单</h3>
+                    <button id="chat-btn" class="menu-btn active">与AI对话</button>
+                    <button id="review-plan-btn" class="menu-btn">生成复习计划</button>
+                    <button id="exercise-btn" class="menu-btn">生成习题</button>
+                    <button id="prompts-btn" class="menu-btn">提示词管理</button>
+                </div>
+
+                <div class="history-section">
+                    <h3>历史记录</h3>
+                    <div id="history-list"></div>
+                </div>
+            </div>
+
+            <div class="right-panel">
+                <div id="chat-container" class="content-panel">
+                    <div id="chat-messages"></div>
+                    <div class="input-area">
+                        <textarea id="message-input" placeholder="请输入你的问题或学习内容..."></textarea>
+                        <button id="send-btn">发送</button>
+                    </div>
+                </div>
+
+                <div id="review-plan-container" class="content-panel hidden">
+                    <div class="form-group">
+                        <label for="subject-input">科目名称：</label>
+                        <input type="text" id="subject-input" placeholder="例如：数学、英语">
+                    </div>
+                    <button id="generate-plan-btn">生成复习计划</button>
+                    <div id="review-plan-result"></div>
+                </div>
+
+                <div id="exercise-container" class="content-panel hidden">
+                    <div class="form-group">
+                        <label for="exercise-subject">科目：</label>
+                        <input type="text" id="exercise-subject" placeholder="例如：数学">
+                    </div>
+                    <div class="form-group">
+                        <label for="exercise-topic">主题：</label>
+                        <input type="text" id="exercise-topic" placeholder="例如：二次函数">
+                    </div>
+                    <div class="form-group">
+                        <label for="exercise-difficulty">难度：</label>
+                        <select id="exercise-difficulty">
+                            <option value="easy">简单</option>
+                            <option value="medium" selected>中等</option>
+                            <option value="hard">困难</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="exercise-count">数量：</label>
+                        <input type="number" id="exercise-count" value="5" min="1" max="20">
+                    </div>
+                    <button id="generate-exercise-btn">生成习题</button>
+                    <div id="exercise-result"></div>
+                </div>
+
+                <div id="prompts-container" class="content-panel hidden">
+                    <div class="form-group">
+                        <label for="prompt-name">提示词名称：</label>
+                        <input type="text" id="prompt-name" placeholder="例如：math_study">
+                    </div>
+                    <div class="form-group">
+                        <label for="prompt-content">提示词内容：</label>
+                        <textarea id="prompt-content" rows="10" placeholder="请输入提示词内容..."></textarea>
+                    </div>
+                    <button id="save-prompt-btn">保存提示词</button>
+                    <div id="prompts-list"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
