@@ -1,0 +1,13 @@
+{
+  "name": "agentai",
+  "version": "1.0.0",
+  "description": "Interactive learning and review platform",
+  "scripts": {
+    "deploy:worker": "wrangler deploy",
+    "preview:worker": "wrangler dev",
+    "serve": "python -m http.server 8000"
+  },
+  "keywords": ["learning", "review", "ai"],
+  "author": "",
+  "license": "MIT"
+}
