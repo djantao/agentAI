@@ -1,0 +1,10 @@
+[
+  {
+    "role": "user",
+    "content": "你好我想学习sparksql源码"
+  },
+  {
+    "role": "assistant",
+    "content": "未配置代理服务器。请在设置中配置代理地址，或查看浏览器控制台获取请求信息。"
+  }
+]
