@@ -16,6 +16,11 @@
                 <input type="text" id="repo-owner" placeholder="仓库所有者" style="width: 150px;">
                 <input type="text" id="repo-name" placeholder="仓库名称" style="width: 150px;">
                 <input type="text" id="proxy-url" placeholder="代理服务器地址" style="width: 200px;">
+                <select id="ai-model" style="width: 150px;">
+                    <option value="qwen-turbo" selected>通义千问 turbo</option>
+                    <option value="qwen-plus">通义千问 plus</option>
+                    <option value="qwen-coder">通义千问 coder</option>
+                </select>
                 <button id="save-config">保存配置</button>
             </div>
         </header>
@@ -26,6 +31,7 @@
                     <h3>功能菜单</h3>
                     <button id="chat-btn" class="menu-btn active">与AI对话</button>
                     <button id="review-plan-btn" class="menu-btn">生成复习计划</button>
+                    <button id="memory-points-btn" class="menu-btn">生成加强记忆知识点</button>
                     <button id="exercise-btn" class="menu-btn">生成习题</button>
                     <button id="prompts-btn" class="menu-btn">提示词管理</button>
                 </div>
@@ -77,6 +83,13 @@
                     </div>
                     <button id="generate-exercise-btn">生成习题</button>
                     <div id="exercise-result"></div>
+                </div>
+
+                <div id="memory-points-container" class="content-panel hidden">
+                    <h3>生成加强记忆的知识点</h3>
+                    <p>系统将分析您的所有学习历史，基于遗忘曲线原理生成需要加强记忆的知识点。</p>
+                    <button id="generate-memory-points-btn">生成加强记忆知识点</button>
+                    <div id="memory-points-result"></div>
                 </div>
 
                 <div id="prompts-container" class="content-panel hidden">

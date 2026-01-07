@@ -4,7 +4,8 @@ let config = {
     openaiApiKey: '',
     repoOwner: '',
     repoName: '',
-    proxyUrl: ''
+    proxyUrl: '',
+    aiModel: 'qwen-turbo'
 };
 
 // 加载配置
@@ -19,6 +20,9 @@ function loadConfig() {
         if (document.getElementById('proxy-url')) {
             document.getElementById('proxy-url').value = config.proxyUrl;
         }
+        if (document.getElementById('ai-model')) {
+            document.getElementById('ai-model').value = config.aiModel;
+        }
     }
 }
 
@@ -30,6 +34,9 @@ function saveConfig() {
     config.repoName = document.getElementById('repo-name').value;
     if (document.getElementById('proxy-url')) {
         config.proxyUrl = document.getElementById('proxy-url').value;
+    }
+    if (document.getElementById('ai-model')) {
+        config.aiModel = document.getElementById('ai-model').value;
     }
     localStorage.setItem('learningPlatformConfig', JSON.stringify(config));
     alert('配置保存成功！');
@@ -93,7 +100,8 @@ async function tongyiApiCall(messages) {
         
         const body = {
             messages: messages,
-            apiKey: config.openaiApiKey
+            apiKey: config.openaiApiKey,
+            model: config.aiModel
         };
         
         const response = await fetch(url, {
@@ -262,23 +270,25 @@ async function generateReviewPlan() {
     resultDiv.textContent = '正在生成复习计划...';
     
     // 获取学习和复习方法提示词
-    const learningMethod = await getGitHubFile('prompts/learning_method.md');
-    const reviewMethod = await getGitHubFile('prompts/review_method.md');
+    const learningEfficiency = await getGitHubFile('prompts/learning_efficiency.md');
+    const forgettingCurve = await getGitHubFile('prompts/forgetting_curve.md');
     
     // 构建提示词
     const prompt = `
-        作为一个学习顾问，根据以下信息为${subject}制定复习计划：
+        作为一个学习顾问，根据以下信息为${subject}制定基于高效学习方法论和遗忘曲线的复习计划：
         
-        学习方法：
-        ${learningMethod || '无学习方法提示词'}
+        高效学习方法论：
+        ${learningEfficiency || '无高效学习方法提示词'}
         
-        复习方法：
-        ${reviewMethod || '无复习方法提示词'}
+        遗忘曲线复习原理：
+        ${forgettingCurve || '无遗忘曲线提示词'}
         
         请制定一个详细的复习计划，包括：
-        1. 每日复习内容
-        2. 复习方法建议
-        3. 预期目标
+        1. 基于遗忘曲线的个性化复习间隔
+        2. 高效学习方法的应用建议
+        3. 每日复习内容和时间安排
+        4. 复习效果评估方法
+        5. 知识点优先级排序
     `;
     
     // 调用通义千问API
@@ -325,6 +335,73 @@ async function generateExercises() {
         resultDiv.textContent = exercises;
     } else {
         resultDiv.textContent = '生成习题失败，请检查API配置！';
+    }
+}
+
+// 生成加强记忆的知识点
+async function generateMemoryPoints() {
+    const resultDiv = document.getElementById('memory-points-result');
+    resultDiv.textContent = '正在分析学习历史并生成加强记忆的知识点...';
+    
+    try {
+        // 获取所有历史对话记录
+        const response = await fetch(`https://api.github.com/repos/${config.repoOwner}/${config.repoName}/contents/conversations`, {
+            headers: {
+                'Authorization': `token ${config.githubToken}`
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('获取学习历史失败');
+        }
+        
+        const files = await response.json();
+        let allConversations = '';
+        
+        // 获取每个对话文件的内容
+        for (const file of files) {
+            const content = await getGitHubFile(file.path);
+            if (content) {
+                const messages = JSON.parse(content);
+                // 提取对话内容，按时间排序
+                const conversationText = messages.map(msg => `${msg.role === 'user' ? '用户' : '助手'}: ${msg.content}`).join('\n');
+                allConversations += `\n=== ${file.name.replace('.json', '')} ===\n${conversationText}\n`;
+            }
+        }
+        
+        // 获取遗忘曲线提示词
+        const forgettingCurve = await getGitHubFile('prompts/forgetting_curve.md');
+        
+        // 构建提示词
+        const prompt = `
+            作为一个学习顾问，基于以下学习历史记录和遗忘曲线原理，分析并生成需要加强记忆的知识点：
+            
+            学习历史记录：
+            ${allConversations}
+            
+            遗忘曲线原理：
+            ${forgettingCurve || '无遗忘曲线提示词'}
+            
+            请分析这些学习记录，找出：
+            1. 关键知识点
+            2. 可能已经遗忘的内容
+            3. 需要加强记忆的重点
+            4. 基于遗忘曲线的复习建议
+            
+            请以清晰的结构呈现，突出需要加强记忆的知识点。
+        `;
+        
+        // 调用通义千问API
+        const memoryPoints = await tongyiApiCall([{ role: 'user', content: prompt }]);
+        
+        if (memoryPoints) {
+            resultDiv.textContent = memoryPoints;
+        } else {
+            resultDiv.textContent = '生成加强记忆知识点失败，请检查API配置！';
+        }
+    } catch (error) {
+        console.error('生成加强记忆知识点错误:', error);
+        resultDiv.textContent = `生成加强记忆知识点失败: ${error.message}`;
     }
 }
 
@@ -416,11 +493,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // 菜单按钮事件
     document.getElementById('chat-btn').addEventListener('click', () => switchPanel('chat-container'));
     document.getElementById('review-plan-btn').addEventListener('click', () => switchPanel('review-plan-container'));
+    document.getElementById('memory-points-btn').addEventListener('click', () => switchPanel('memory-points-container'));
     document.getElementById('exercise-btn').addEventListener('click', () => switchPanel('exercise-container'));
     document.getElementById('prompts-btn').addEventListener('click', () => switchPanel('prompts-container'));
     
     // 功能按钮事件
     document.getElementById('generate-plan-btn').addEventListener('click', generateReviewPlan);
+    document.getElementById('generate-memory-points-btn').addEventListener('click', generateMemoryPoints);
     document.getElementById('generate-exercise-btn').addEventListener('click', generateExercises);
     
     // 定时加载历史记录
