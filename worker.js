@@ -6,9 +6,25 @@ addEventListener('fetch', event => {
 })
 
 async function handleRequest(request) {
+  // 处理OPTIONS请求（CORS预检）
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type'
+      }
+    })
+  }
+
   // 只处理POST请求
   if (request.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 })
+    return new Response('Method not allowed', {
+      status: 405,
+      headers: {
+        'Access-Control-Allow-Origin': '*'
+      }
+    })
   }
 
   // 获取请求体
@@ -40,12 +56,8 @@ async function handleRequest(request) {
       },
       body: JSON.stringify({
         model: 'qwen-turbo',
-        input: {
-          prompt: prompt
-        },
-        parameters: {
-          result_format: 'text'
-        }
+        input: { prompt: prompt },
+        parameters: { result_format: 'text' }
       })
     })
 
@@ -73,18 +85,3 @@ async function handleRequest(request) {
     })
   }
 }
-
-// 处理OPTIONS请求（CORS预检）
-addEventListener('fetch', event => {
-  if (event.request.method === 'OPTIONS') {
-    event.respondWith(
-      new Response(null, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type'
-        }
-      })
-    )
-  }
-})
