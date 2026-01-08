@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GitHub学习平台</title>
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div class="container">
@@ -21,6 +22,17 @@
                     <option value="qwen-plus">通义千问 plus</option>
                     <option value="qwen-coder">通义千问 coder</option>
                 </select>
+                <select id="style-selector" style="width: 150px;">
+                    <option value="github" selected>GitHub风格</option>
+                    <option value="dark">暗黑风格</option>
+                    <option value="light">浅色风格</option>
+                    <option value="modern">现代风格</option>
+                </select>
+                <!-- Notion集成配置 -->
+                <input type="text" id="notion-api-key" placeholder="Notion API Key" style="width: 200px;">
+                <input type="text" id="notion-database-id" placeholder="Notion数据库ID" style="width: 200px;">
+                <!-- 集简云Webhook配置 -->
+                <input type="text" id="webhook-url" placeholder="集简云Webhook URL" style="width: 250px;">
                 <button id="save-config">保存配置</button>
             </div>
         </header>
@@ -30,10 +42,13 @@
                 <div class="menu-section">
                     <h3>功能菜单</h3>
                     <button id="chat-btn" class="menu-btn active">与AI对话</button>
-                    <button id="review-plan-btn" class="menu-btn">生成复习计划</button>
-                    <button id="memory-points-btn" class="menu-btn">生成加强记忆知识点</button>
-                    <button id="exercise-btn" class="menu-btn">生成习题</button>
-                    <button id="prompts-btn" class="menu-btn">提示词管理</button>
+                <button id="review-plan-btn" class="menu-btn">生成复习计划</button>
+                <button id="memory-points-btn" class="menu-btn">生成加强记忆知识点</button>
+                <button id="exercise-btn" class="menu-btn">生成习题</button>
+                <button id="progress-btn" class="menu-btn">学习进度</button>
+                <button id="mastery-btn" class="menu-btn">知识掌握评估</button>
+                <button id="reminder-btn" class="menu-btn">学习提醒</button>
+                <button id="prompts-btn" class="menu-btn">提示词管理</button>
                 </div>
 
                 <div class="history-section">
@@ -54,7 +69,15 @@
                 <div id="review-plan-container" class="content-panel hidden">
                     <div class="form-group">
                         <label for="subject-input">科目名称：</label>
-                        <input type="text" id="subject-input" placeholder="例如：数学、英语">
+                        <select id="subject-input" class="form-control">
+                            <option value="" selected disabled>选择科目</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="module-input">模块：</label>
+                        <select id="module-input" class="form-control">
+                            <option value="" selected disabled>选择模块</option>
+                        </select>
                     </div>
                     <button id="generate-plan-btn">生成复习计划</button>
                     <div id="review-plan-result"></div>
@@ -63,11 +86,15 @@
                 <div id="exercise-container" class="content-panel hidden">
                     <div class="form-group">
                         <label for="exercise-subject">科目：</label>
-                        <input type="text" id="exercise-subject" placeholder="例如：数学">
+                        <select id="exercise-subject" class="form-control">
+                            <option value="" selected disabled>选择科目</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label for="exercise-topic">主题：</label>
-                        <input type="text" id="exercise-topic" placeholder="例如：二次函数">
+                        <select id="exercise-topic" class="form-control">
+                            <option value="" selected disabled>选择模块</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label for="exercise-difficulty">难度：</label>
@@ -90,6 +117,193 @@
                     <p>系统将分析您的所有学习历史，基于遗忘曲线原理生成需要加强记忆的知识点。</p>
                     <button id="generate-memory-points-btn">生成加强记忆知识点</button>
                     <div id="memory-points-result"></div>
+                </div>
+
+                <div id="progress-container" class="content-panel hidden">
+                    <h3>学习进度跟踪</h3>
+                    <div class="progress-overview">
+                        <div class="stat-card">
+                            <div class="stat-title">今日学习时间</div>
+                            <div class="stat-value" id="today-study-time">0 分钟</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-title">本周学习时间</div>
+                            <div class="stat-value" id="week-study-time">0 分钟</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-title">总学习时间</div>
+                            <div class="stat-value" id="total-study-time">0 分钟</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-title">学习可信度</div>
+                            <div class="stat-value" id="progress-credibility">高</div>
+                        </div>
+                    </div>
+                    
+                    <div class="learned-courses">
+                        <h4>已学习课程和模块</h4>
+                        <div id="learned-courses-list"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="subject-progress">当前学习科目：</label>
+                        <select id="subject-progress" class="form-control">
+                            <option value="" selected disabled>选择科目</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="module-progress">当前模块：</label>
+                        <select id="module-progress" class="form-control">
+                            <option value="" selected disabled>选择模块</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="study-duration">学习时长（分钟）：</label>
+                        <input type="number" id="study-duration" min="5" max="300" value="30">
+                    </div>
+                    <div class="form-group">
+                        <label for="study-status">学习状态：</label>
+                        <select id="study-status">
+                            <option value="focused">专注学习</option>
+                            <option value="review">复习巩固</option>
+                            <option value="practice">练习应用</option>
+                            <option value="problem-solving">解决问题</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="study-summary">学习内容摘要（建议填写，提高可信度）：</label>
+                        <textarea id="study-summary" rows="3" placeholder="简要描述你学习的内容或收获...
+例如：今天学习了Python函数的参数传递，包括位置参数、关键字参数和默认参数的使用方法，通过练习加深了理解。"></textarea>
+                        <small class="form-hint">填写详细摘要可以提高学习记录的可信度，也便于日后复习。</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="study-challenge">遇到的挑战（建议填写）：</label>
+                        <textarea id="study-challenge" rows="2" placeholder="分享你在学习中遇到的问题或困难...
+例如：在理解闭包概念时遇到了困难，需要更多练习来掌握。"></textarea>
+                        <small class="form-hint">记录挑战有助于针对性地解决问题，提升学习效果。</small>
+                    </div>
+                    
+                    <button id="record-progress-btn">记录学习进度</button>
+                    
+                    <div class="progress-history">
+                        <h4>学习历史</h4>
+                        <canvas id="progress-chart" width="400" height="200"></canvas>
+                        <div id="progress-list"></div>
+                    </div>
+                </div>
+
+                <div id="mastery-container" class="content-panel hidden">
+                    <h3>知识掌握程度评估</h3>
+                    
+                    <div class="mastery-overview">
+                        <div class="stat-card">
+                            <div class="stat-title">当前掌握度</div>
+                            <div class="stat-value" id="current-mastery">0%</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-title">已评估知识点</div>
+                            <div class="stat-value" id="assessed-topics">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-title">需重点复习</div>
+                            <div class="stat-value" id="review-topics">0</div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="mastery-subject">评估科目：</label>
+                        <select id="mastery-subject" class="form-control">
+                            <option value="" selected disabled>选择科目</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="mastery-topic">评估模块：</label>
+                        <select id="mastery-topic" class="form-control">
+                            <option value="" selected disabled>选择模块</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="question-count">题目数量：</label>
+                        <input type="number" id="question-count" min="1" max="20" value="5">
+                    </div>
+                    
+                    <button id="generate-assessment-btn">生成评估测试</button>
+                    
+                    <div id="assessment-test" class="hidden">
+                        <h4>评估测试</h4>
+                        <div id="questions-container"></div>
+                        <button id="submit-assessment-btn">提交答案</button>
+                    </div>
+                    
+                    <div id="assessment-result" class="hidden">
+                        <h4>评估结果</h4>
+                        <div id="result-summary"></div>
+                        <div id="topic-mastery"></div>
+                        <button id="view-detail-btn">查看详细分析</button>
+                    </div>
+                    
+                    <!-- 详细分析模态框 -->
+                    <div id="detailed-analysis-modal" class="modal hidden">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h3>详细分析</h3>
+                                <button class="close-btn" onclick="closeDetailedAnalysis()">&times;</button>
+                            </div>
+                            <div class="modal-body">
+                                <div id="detailed-analysis-content"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="reminder-container" class="content-panel hidden">
+                    <h3>学习提醒</h3>
+                    
+                    <div class="reminder-settings">
+                        <h4>提醒设置</h4>
+                        <div class="form-group">
+                            <label for="reminder-time">每日学习提醒时间：</label>
+                            <input type="time" id="reminder-time" value="20:00">
+                        </div>
+                        <div class="form-group">
+                            <label for="review-interval">复习提醒间隔（天）：</label>
+                            <input type="number" id="review-interval" min="1" max="30" value="3">
+                        </div>
+                        <div class="form-group">
+                            <input type="checkbox" id="enable-daily-reminder">
+                            <label for="enable-daily-reminder">启用每日学习提醒</label>
+                        </div>
+                        <div class="form-group">
+                            <input type="checkbox" id="enable-review-reminder">
+                            <label for="enable-review-reminder">启用复习提醒</label>
+                        </div>
+                        
+                        <hr>
+                        <h4>短信提醒设置</h4>
+                        <div class="form-group">
+                            <input type="checkbox" id="enable-sms-reminder">
+                            <label for="enable-sms-reminder">启用短信提醒</label>
+                        </div>
+                        <div class="form-group">
+                            <label for="phone-number">手机号码：</label>
+                            <input type="text" id="phone-number" placeholder="请输入手机号码">
+                        </div>
+                        <div class="form-group">
+                            <label for="sms-api-key">短信API密钥（可选）：</label>
+                            <input type="password" id="sms-api-key" placeholder="请输入短信服务API密钥">
+                        </div>
+                        <button id="save-reminder-settings">保存设置</button>
+                    </div>
+                    
+                    <div class="reminders-list">
+                        <h4>即将到来的提醒</h4>
+                        <div id="upcoming-reminders"></div>
+                    </div>
+                    
+                    <div class="review-topics">
+                        <h4>需要复习的内容</h4>
+                        <div id="pending-review-topics"></div>
+                    </div>
                 </div>
 
                 <div id="prompts-container" class="content-panel hidden">
