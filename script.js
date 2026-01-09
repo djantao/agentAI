@@ -22,21 +22,195 @@ let courseProgress = {
     coursesLearned: []
 };
 
+// 保存课程进度到GitHub
+async function saveCourseProgressToGitHub() {
+    try {
+        // 确保配置了GitHub相关信息
+        if (!config.githubToken || !config.repoOwner || !config.repoName) {
+            console.warn('GitHub配置不完整，无法保存课程进度到GitHub');
+            return false;
+        }
+        
+        // 保存到GitHub的courseList目录
+        const filePath = 'courseList/courseProgress.json';
+        const content = JSON.stringify(courseProgress, null, 2);
+        const message = `Update course progress - ${new Date().toISOString()}`;
+        
+        const success = await saveGitHubFile(filePath, content, message);
+        if (success) {
+            console.log('课程进度已保存到GitHub');
+            return true;
+        } else {
+            console.error('保存课程进度到GitHub失败');
+            return false;
+        }
+    } catch (error) {
+        console.error('保存课程进度到GitHub时发生错误:', error);
+        return false;
+    }
+}
+
+// 从GitHub加载课程进度
+async function loadCourseProgressFromGitHub() {
+    try {
+        // 确保配置了GitHub相关信息
+        if (!config.githubToken || !config.repoOwner || !config.repoName) {
+            console.warn('GitHub配置不完整，无法从GitHub加载课程进度');
+            return false;
+        }
+        
+        // 从GitHub的courseList目录加载
+        const filePath = 'courseList/courseProgress.json';
+        const content = await getGitHubFile(filePath);
+        
+        if (content) {
+            courseProgress = JSON.parse(content);
+            localStorage.setItem('courseProgress', JSON.stringify(courseProgress));
+            console.log('课程进度已从GitHub加载');
+            return true;
+        } else {
+            console.warn('GitHub上不存在课程进度文件，使用本地存储');
+            return false;
+        }
+    } catch (error) {
+        console.error('从GitHub加载课程进度时发生错误:', error);
+        return false;
+    }
+}
+
 // 保存课程进度
-function saveCourseProgress() {
+async function saveCourseProgress() {
+    // 保存到本地存储
     localStorage.setItem('courseProgress', JSON.stringify(courseProgress));
+    
+    // 尝试保存到GitHub
+    await saveCourseProgressToGitHub();
 }
 
 // 加载课程进度
-function loadCourseProgress() {
-    const savedProgress = localStorage.getItem('courseProgress');
-    if (savedProgress) {
-        courseProgress = JSON.parse(savedProgress);
+async function loadCourseProgress() {
+    // 优先从GitHub加载
+    const loadedFromGitHub = await loadCourseProgressFromGitHub();
+    
+    // 如果GitHub加载失败，使用本地存储
+    if (!loadedFromGitHub) {
+        const savedProgress = localStorage.getItem('courseProgress');
+        if (savedProgress) {
+            courseProgress = JSON.parse(savedProgress);
+        }
+    }
+}
+
+// 导出课程数据为JSON文件
+function exportCourseData() {
+    try {
+        const data = {
+            courseProgress: courseProgress,
+            config: config,
+            learningProgress: JSON.parse(localStorage.getItem('learningProgress') || '{}'),
+            assessmentHistory: JSON.parse(localStorage.getItem('assessmentHistory') || '[]'),
+            reminderSettings: JSON.parse(localStorage.getItem('reminderSettings') || '{}')
+        };
+        
+        const jsonString = JSON.stringify(data, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `course-data-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        console.log('课程数据导出成功');
+        return true;
+    } catch (error) {
+        console.error('导出课程数据失败:', error);
+        alert('导出课程数据失败: ' + error.message);
+        return false;
+    }
+}
+
+// 导入课程数据从JSON文件
+function importCourseData(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                
+                // 更新课程进度
+                if (data.courseProgress) {
+                    courseProgress = data.courseProgress;
+                    localStorage.setItem('courseProgress', JSON.stringify(courseProgress));
+                }
+                
+                // 更新配置
+                if (data.config) {
+                    Object.assign(config, data.config);
+                    localStorage.setItem('learningPlatformConfig', JSON.stringify(config));
+                }
+                
+                // 更新学习进度
+                if (data.learningProgress) {
+                    localStorage.setItem('learningProgress', JSON.stringify(data.learningProgress));
+                }
+                
+                // 更新评估历史
+                if (data.assessmentHistory) {
+                    localStorage.setItem('assessmentHistory', JSON.stringify(data.assessmentHistory));
+                }
+                
+                // 更新提醒设置
+                if (data.reminderSettings) {
+                    localStorage.setItem('reminderSettings', JSON.stringify(data.reminderSettings));
+                }
+                
+                console.log('课程数据导入成功');
+                resolve(true);
+            } catch (error) {
+                console.error('导入课程数据失败:', error);
+                reject(error);
+            }
+        };
+        reader.onerror = function(e) {
+            console.error('读取文件失败:', e);
+            reject(e);
+        };
+        reader.readAsText(file);
+    });
+}
+
+// 从GitHub仓库加载课程数据
+async function loadCourseDataFromGitHub(repoUrl = 'https://raw.githubusercontent.com/yourusername/learning-platform/main/courseList/') {
+    try {
+        const response = await fetch(`${repoUrl}courseProgress.json`);
+        if (response.ok) {
+            const data = await response.json();
+            courseProgress = data;
+            localStorage.setItem('courseProgress', JSON.stringify(courseProgress));
+            console.log('课程数据已从GitHub仓库加载');
+            return true;
+        } else {
+            console.warn('从GitHub加载失败，使用localStorage中的数据');
+            return false;
+        }
+    } catch (error) {
+        console.error('从GitHub加载课程数据失败:', error);
+        return false;
     }
 }
 
 // 初始化课程进度
-loadCourseProgress();
+async function initializeApp() {
+    await loadCourseProgress();
+    loadStyle();
+    loadConfig();
+}
+
+// 页面加载完成后初始化应用
+document.addEventListener('DOMContentLoaded', initializeApp);
 
 // Notion API调用函数
 async function notionApiCall(endpoint, method = 'GET', body = null) {
@@ -654,6 +828,11 @@ async function sendMessage() {
     // 加载对话历史
     let conversation = await loadTodaysConversation();
     
+    // 限制对话历史长度，只保留最近5轮对话
+    if (conversation.length > 10) {
+        conversation = conversation.slice(-10);
+    }
+    
     // 添加用户消息到历史
     conversation.push({ role: 'user', content: userMessage });
     
@@ -677,10 +856,10 @@ async function sendMessage() {
     }
     
     if (isCourseRequest) {
-        // 生成课程列表的提示词
+        // 生成课程列表的优化提示词
         const coursePrompt = conversation.slice(-1).concat([{
             role: 'system',
-            content: '请根据用户的学习需求，生成一个详细的课程列表。每个课程必须包含：1. 序号 2. 课程名称 3. 课程简介（不超过50字） 4. 适合难度（初级/中级/高级）。格式要求清晰规范，使用"1. 课程名称：[名称]，简介：[简介]，难度：[难度]"的格式。'
+            content: '你是一个专业的课程规划师，请根据用户的学习需求，首先精准识别用户想要学习的具体内容和主题。然后为该主题设计一个完整的学习路径，必须分为初中高三个难度级别。\n\n每个课程必须严格包含以下信息：\n1. 序号（阿拉伯数字）\n2. 课程名称（简洁明了，反映课程核心内容）\n3. 课程简介（不超过80字，突出该课程在学习路径中的作用和价值）\n4. 适合难度（只能是：初级/中级/高级，确保三个级别都有覆盖）\n\n请严格按照以下格式输出，不要添加任何额外内容：\n1. 课程名称：[名称]，简介：[简介]，难度：[难度]\n2. 课程名称：[名称]，简介：[简介]，难度：[难度]\n...\n\n要求：\n1. 必须覆盖初级、中级、高级三个难度级别\n2. 课程顺序要符合学习的渐进性和逻辑性\n3. 每个级别至少包含2-3门课程\n4. 课程内容要与用户的学习需求高度相关'
         }]);
         
         assistantResponse = await tongyiApiCall(coursePrompt);
@@ -704,7 +883,9 @@ async function sendMessage() {
         
         if (courses.length > 0) {
             courseProgress.availableCourses = courses;
-            saveCourseProgress();
+            await saveCourseProgress();
+            // 显示课程选择界面
+            showCourseSelection();
         }
     }
     // 检查是否是选择课程
@@ -712,32 +893,8 @@ async function sendMessage() {
         // 解析用户选择的课程
         const selectedCourse = parseCourseSelection(userMessage);
         if (selectedCourse) {
-            // 切换到费曼学习法教学
-            const feynmanPrompt = conversation.slice(-1).concat([{
-                role: 'system',
-                content: '请使用费曼学习法来教授用户选择的课程。教学要求：\n1. 首先用非常简单易懂的语言（5岁孩子能理解）解释课程核心概念；\n2. 指出你解释中可能存在的模糊点或未解释清楚的地方；\n3. 回到课程内容，重新解释这些模糊点；\n4. 最终提供一个简洁明了的总结。\n请确保教学内容生动有趣，避免使用专业术语。'
-            }]);
-            
-            assistantResponse = await tongyiApiCall(feynmanPrompt);
-            
-            // 记录学习历史
-            courseProgress.learningHistory.push({
-                course: selectedCourse.name || userMessage,
-                courseId: selectedCourse.id,
-                date: new Date().toISOString(),
-                content: assistantResponse
-            });
-            
-            // 更新课程学习进度
-            if (selectedCourse.id) {
-                courseProgress.coursesLearned.push({
-                    id: selectedCourse.id,
-                    name: selectedCourse.name,
-                    date: new Date().toISOString()
-                });
-            }
-            
-            saveCourseProgress();
+            // 使用统一的费曼学习法教学函数
+            await startFeynmanLearning(selectedCourse);
         }
     }
     // 正常对话
@@ -947,6 +1104,196 @@ function switchPanel(panelId) {
     const btnId = panelId.replace('-container', '-btn');
     if (document.getElementById(btnId)) {
         document.getElementById(btnId).classList.add('active');
+    }
+}
+
+// 显示课程选择界面
+function showCourseSelection() {
+    // 隐藏对话面板
+    document.getElementById('chat-container').classList.add('hidden');
+    // 显示课程选择面板
+    document.getElementById('course-selection-container').classList.remove('hidden');
+    
+    // 生成课程列表
+    generateCourseList();
+    
+    // 添加返回按钮事件监听
+    document.getElementById('back-to-chat-btn').onclick = () => {
+        // 隐藏课程选择面板
+        document.getElementById('course-selection-container').classList.add('hidden');
+        // 显示对话面板
+        document.getElementById('chat-container').classList.remove('hidden');
+    };
+}
+
+// 生成课程列表
+function generateCourseList() {
+    const courseListDiv = document.getElementById('course-list');
+    courseListDiv.innerHTML = '';
+    
+    if (!courseProgress.availableCourses || courseProgress.availableCourses.length === 0) {
+        courseListDiv.innerHTML = '<p style="text-align: center; color: #6a737d;">暂无可用课程</p>';
+        return;
+    }
+    
+    // 按难度分组课程
+    const coursesByDifficulty = {
+        '初级': [],
+        '中级': [],
+        '高级': []
+    };
+    
+    courseProgress.availableCourses.forEach(course => {
+        const difficulty = course.difficulty || '初级';
+        if (coursesByDifficulty[difficulty]) {
+            coursesByDifficulty[difficulty].push(course);
+        } else {
+            coursesByDifficulty['初级'].push(course);
+        }
+    });
+    
+    // 按难度顺序显示课程
+    ['初级', '中级', '高级'].forEach(difficulty => {
+        if (coursesByDifficulty[difficulty].length > 0) {
+            // 添加难度标题
+            const difficultyHeader = document.createElement('h4');
+            difficultyHeader.textContent = `${difficulty}课程`;
+            difficultyHeader.style.cssText = `
+                margin-top: 20px;
+                margin-bottom: 10px;
+                color: #0366d6;
+                border-bottom: 1px solid #e1e4e8;
+                padding-bottom: 5px;
+            `;
+            courseListDiv.appendChild(difficultyHeader);
+            
+            // 添加该难度下的所有课程
+            coursesByDifficulty[difficulty].forEach(course => {
+                const courseItemDiv = document.createElement('div');
+                courseItemDiv.className = 'course-item';
+                courseItemDiv.dataset.courseId = course.id;
+                
+                courseItemDiv.innerHTML = `
+                    <div class="course-header">
+                        <div style="display: flex; align-items: center;">
+                            <span class="course-number">${course.id}.</span>
+                            <span class="course-name">${course.name}</span>
+                        </div>
+                        <span class="course-difficulty" data-difficulty="${course.difficulty}">${course.difficulty}</span>
+                    </div>
+                    <div class="course-description">${course.description}</div>
+                `;
+                
+                // 添加点击事件
+                courseItemDiv.onclick = () => {
+                    selectCourse(course);
+                };
+                
+                courseListDiv.appendChild(courseItemDiv);
+            });
+        }
+    });
+}
+
+// 选择课程
+function selectCourse(course) {
+    // 移除其他课程的选中状态
+    document.querySelectorAll('.course-item').forEach(item => {
+        item.classList.remove('selected');
+    });
+    
+    // 添加当前课程的选中状态
+    const selectedItem = document.querySelector(`[data-course-id="${course.id}"]`);
+    if (selectedItem) {
+        selectedItem.classList.add('selected');
+    }
+    
+    // 使用费曼学习法教学
+    startFeynmanLearning(course);
+}
+
+// 开始费曼学习法教学
+async function startFeynmanLearning(course) {
+    // 显示加载状态
+    const loadingIndicator = document.createElement('div');
+    loadingIndicator.className = 'loading-indicator';
+    loadingIndicator.textContent = '正在准备费曼学习法教学...';
+    loadingIndicator.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        padding: 20px;
+        background-color: rgba(255, 255, 255, 0.9);
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        font-size: 16px;
+        z-index: 1000;
+    `;
+    document.body.appendChild(loadingIndicator);
+    
+    try {
+        // 生成费曼学习法教学内容
+        const feynmanPrompt = [{
+            role: 'system',
+            content: '你是一个优秀的费曼学习法教师，请按照以下步骤教授用户选择的课程：\n1. 首先用5岁孩子能理解的简单语言解释课程的核心概念，避免使用任何专业术语\n2. 指出解释中可能存在的模糊点或未解释清楚的地方\n3. 回到课程内容，重新解释这些模糊点，确保用户完全理解\n4. 最后提供一个简洁明了的总结，强化学习效果\n\n请确保教学内容生动有趣，符合费曼学习法的"以教促学"理念。'
+        }, {
+            role: 'user',
+            content: `请用费曼学习法教我学习：${course.name}。课程简介：${course.description}`
+        }];
+        
+        const teachingContent = await tongyiApiCall(feynmanPrompt);
+        
+        // 记录学习历史
+        courseProgress.learningHistory.push({
+            course: course.name,
+            courseId: course.id,
+            date: new Date().toISOString(),
+            content: teachingContent,
+            method: 'feynman'
+        });
+        
+        // 更新课程学习进度
+        if (!courseProgress.coursesLearned) {
+            courseProgress.coursesLearned = [];
+        }
+        
+        const existingCourse = courseProgress.coursesLearned.find(c => c.id === course.id);
+        if (!existingCourse) {
+            courseProgress.coursesLearned.push({
+                id: course.id,
+                name: course.name,
+                difficulty: course.difficulty,
+                firstLearnedDate: new Date().toISOString(),
+                lastLearnedDate: new Date().toISOString(),
+                learningCount: 1
+            });
+        } else {
+            existingCourse.lastLearnedDate = new Date().toISOString();
+            existingCourse.learningCount = (existingCourse.learningCount || 0) + 1;
+        }
+        
+        // 保存课程进度
+        await saveCourseProgress();
+        
+        // 返回对话界面并显示教学内容
+        document.getElementById('course-selection-container').classList.add('hidden');
+        document.getElementById('chat-container').classList.remove('hidden');
+        
+        // 显示教学内容
+        displayMessage('assistant', teachingContent);
+        
+        // 添加到对话历史
+        let conversation = await loadTodaysConversation();
+        conversation.push({ role: 'assistant', content: teachingContent });
+        await saveTodaysConversation(conversation);
+        
+    } catch (error) {
+        console.error('费曼学习法教学失败:', error);
+        alert('生成教学内容失败，请稍后重试。');
+    } finally {
+        // 移除加载状态
+        document.body.removeChild(loadingIndicator);
     }
 }
 
@@ -1309,10 +1656,11 @@ function updateSubjectModuleDropdowns() {
     const exerciseSubjectSelect = document.getElementById('exercise-subject');
     const exerciseModuleSelect = document.getElementById('exercise-topic');
 
-    // 提取所有科目
+    // 提取所有科目和模块
     const subjects = new Set();
     const modulesBySubject = {};
 
+    // 1. 从学习进度中提取
     progressData.forEach(progress => {
         subjects.add(progress.subject);
         if (!modulesBySubject[progress.subject]) {
@@ -1320,6 +1668,30 @@ function updateSubjectModuleDropdowns() {
         }
         modulesBySubject[progress.subject].add(progress.module);
     });
+
+    // 2. 从课程列表中提取
+    if (courseProgress.availableCourses && courseProgress.availableCourses.length > 0) {
+        courseProgress.availableCourses.forEach(course => {
+            // 将课程作为科目添加
+            subjects.add(course.name);
+            if (!modulesBySubject[course.name]) {
+                modulesBySubject[course.name] = new Set();
+            }
+            // 将难度作为模块添加
+            modulesBySubject[course.name].add(course.difficulty);
+        });
+    }
+
+    // 3. 从已学习的课程中提取
+    if (courseProgress.coursesLearned && courseProgress.coursesLearned.length > 0) {
+        courseProgress.coursesLearned.forEach(course => {
+            subjects.add(course.name);
+            if (!modulesBySubject[course.name]) {
+                modulesBySubject[course.name] = new Set();
+            }
+            modulesBySubject[course.name].add(course.difficulty);
+        });
+    }
 
     // 更新科目下拉框
     [subjectSelect, masterySubjectSelect, reviewSubjectSelect, exerciseSubjectSelect].forEach(select => {
