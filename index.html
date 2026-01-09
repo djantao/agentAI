@@ -47,8 +47,10 @@
                 <button id="exercise-btn" class="menu-btn">生成习题</button>
                 <button id="progress-btn" class="menu-btn">学习进度</button>
                 <button id="mastery-btn" class="menu-btn">知识掌握评估</button>
+                <button id="learning-suggestions-btn" class="menu-btn">高效学习建议</button>
                 <button id="reminder-btn" class="menu-btn">学习提醒</button>
                 <button id="prompts-btn" class="menu-btn">提示词管理</button>
+                <button id="select-course-btn" class="menu-btn">选择课程学习</button>
                 </div>
 
                 <div class="history-section">
@@ -73,6 +75,26 @@
                     <div id="course-list" class="course-list"></div>
                     <div class="course-actions">
                         <button id="back-to-chat-btn">返回对话</button>
+                    </div>
+                </div>
+
+                <div id="course-select-container" class="content-panel hidden">
+                    <h3>选择课程学习</h3>
+                    <div class="form-group">
+                        <label for="course-dropdown">选择课程：</label>
+                        <select id="course-dropdown" class="form-control">
+                            <option value="" selected disabled>请选择课程</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="module-dropdown">选择模块：</label>
+                        <select id="module-dropdown" class="form-control">
+                            <option value="" selected disabled>请选择模块</option>
+                        </select>
+                    </div>
+                    <div class="course-actions">
+                        <button id="start-learning-btn">开始学习</button>
+                        <button id="back-to-main-btn">返回主界面</button>
                     </div>
                 </div>
 
@@ -264,6 +286,13 @@
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <div id="learning-suggestions-container" class="content-panel hidden">
+                    <h3>高效学习建议</h3>
+                    <p>基于你的学习历史、掌握度和遗忘曲线原理，为你生成个性化的高效学习建议：</p>
+                    <button id="generate-suggestions-btn">生成高效学习建议</button>
+                    <div id="learning-suggestions-result"></div>
                 </div>
 
                 <div id="reminder-container" class="content-panel hidden">
