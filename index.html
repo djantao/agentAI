@@ -63,6 +63,16 @@
                     <div class="input-area">
                         <textarea id="message-input" placeholder="请输入你的问题或学习内容..."></textarea>
                         <button id="send-btn">发送</button>
+                        <div id="loading-indicator" class="hidden">正在思考中...</div>
+                    </div>
+                </div>
+
+                <div id="course-selection-container" class="content-panel hidden">
+                    <h3>课程列表</h3>
+                    <p>根据你的学习需求，我为你生成了以下课程：</p>
+                    <div id="course-list" class="course-list"></div>
+                    <div class="course-actions">
+                        <button id="back-to-chat-btn">返回对话</button>
                     </div>
                 </div>
 

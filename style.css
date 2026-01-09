@@ -882,6 +882,83 @@ body.style-modern .menu-btn.active {
     box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
 }
 
+/* 课程选择界面样式 */
+.course-list {
+    margin: 20px 0;
+}
+
+.course-item {
+    padding: 15px;
+    margin-bottom: 15px;
+    background-color: #f6f8fa;
+    border-radius: 6px;
+    border: 1px solid #e1e4e8;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.course-item:hover {
+    background-color: #e1e4e8;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.course-item.selected {
+    background-color: rgba(3, 102, 214, 0.1);
+    border-color: #0366d6;
+}
+
+.course-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.course-number {
+    font-weight: bold;
+    color: #0366d6;
+    font-size: 16px;
+}
+
+.course-name {
+    font-weight: bold;
+    font-size: 16px;
+    margin-left: 10px;
+}
+
+.course-difficulty {
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.course-difficulty[data-difficulty="初级"] {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.course-difficulty[data-difficulty="中级"] {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.course-difficulty[data-difficulty="高级"] {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.course-description {
+    color: #6a737d;
+    margin-left: 40px;
+    font-size: 14px;
+}
+
+.course-actions {
+    margin-top: 20px;
+    text-align: center;
+}
+
 /* 学习提醒样式 */
 .reminder-settings {
     margin-bottom: 30px;
