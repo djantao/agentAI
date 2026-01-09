@@ -22,12 +22,48 @@ let courseProgress = {
     coursesLearned: []
 };
 
+// 检查并创建GitHub目录（通过创建.gitkeep文件）
+async function ensureGitHubDirectory(directoryPath) {
+    try {
+        // 创建.gitkeep文件来确保目录存在
+        const filePath = `${directoryPath}/.gitkeep`;
+        const content = '';
+        const message = `Ensure directory ${directoryPath} exists`;
+        
+        // 尝试获取目录是否存在
+        const getResponse = await fetch(`https://api.github.com/repos/${config.repoOwner}/${config.repoName}/contents/${filePath}`, {
+            headers: {
+                'Authorization': `token ${config.githubToken}`
+            }
+        });
+        
+        // 如果目录不存在（404），创建.gitkeep文件
+        if (getResponse.status === 404) {
+            const success = await saveGitHubFile(filePath, content, message);
+            return success;
+        }
+        
+        // 目录已经存在
+        return true;
+    } catch (error) {
+        console.error('确保GitHub目录存在时发生错误:', error);
+        return false;
+    }
+}
+
 // 保存课程进度到GitHub
 async function saveCourseProgressToGitHub() {
     try {
         // 确保配置了GitHub相关信息
         if (!config.githubToken || !config.repoOwner || !config.repoName) {
             console.warn('GitHub配置不完整，无法保存课程进度到GitHub');
+            return false;
+        }
+        
+        // 确保courseList目录存在
+        const directoryExists = await ensureGitHubDirectory('courseList');
+        if (!directoryExists) {
+            console.error('无法创建courseList目录');
             return false;
         }
         
@@ -78,13 +114,17 @@ async function loadCourseProgressFromGitHub() {
     }
 }
 
+
+
 // 保存课程进度
 async function saveCourseProgress() {
     // 保存到本地存储
     localStorage.setItem('courseProgress', JSON.stringify(courseProgress));
     
     // 尝试保存到GitHub
-    await saveCourseProgressToGitHub();
+    const savedToGitHub = await saveCourseProgressToGitHub();
+    
+    return savedToGitHub;
 }
 
 // 加载课程进度
@@ -99,108 +139,15 @@ async function loadCourseProgress() {
             courseProgress = JSON.parse(savedProgress);
         }
     }
+    
+    console.log('课程进度已加载。');
 }
 
-// 导出课程数据为JSON文件
-function exportCourseData() {
-    try {
-        const data = {
-            courseProgress: courseProgress,
-            config: config,
-            learningProgress: JSON.parse(localStorage.getItem('learningProgress') || '{}'),
-            assessmentHistory: JSON.parse(localStorage.getItem('assessmentHistory') || '[]'),
-            reminderSettings: JSON.parse(localStorage.getItem('reminderSettings') || '{}')
-        };
-        
-        const jsonString = JSON.stringify(data, null, 2);
-        const blob = new Blob([jsonString], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `course-data-${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        console.log('课程数据导出成功');
-        return true;
-    } catch (error) {
-        console.error('导出课程数据失败:', error);
-        alert('导出课程数据失败: ' + error.message);
-        return false;
-    }
-}
 
-// 导入课程数据从JSON文件
-function importCourseData(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            try {
-                const data = JSON.parse(e.target.result);
-                
-                // 更新课程进度
-                if (data.courseProgress) {
-                    courseProgress = data.courseProgress;
-                    localStorage.setItem('courseProgress', JSON.stringify(courseProgress));
-                }
-                
-                // 更新配置
-                if (data.config) {
-                    Object.assign(config, data.config);
-                    localStorage.setItem('learningPlatformConfig', JSON.stringify(config));
-                }
-                
-                // 更新学习进度
-                if (data.learningProgress) {
-                    localStorage.setItem('learningProgress', JSON.stringify(data.learningProgress));
-                }
-                
-                // 更新评估历史
-                if (data.assessmentHistory) {
-                    localStorage.setItem('assessmentHistory', JSON.stringify(data.assessmentHistory));
-                }
-                
-                // 更新提醒设置
-                if (data.reminderSettings) {
-                    localStorage.setItem('reminderSettings', JSON.stringify(data.reminderSettings));
-                }
-                
-                console.log('课程数据导入成功');
-                resolve(true);
-            } catch (error) {
-                console.error('导入课程数据失败:', error);
-                reject(error);
-            }
-        };
-        reader.onerror = function(e) {
-            console.error('读取文件失败:', e);
-            reject(e);
-        };
-        reader.readAsText(file);
-    });
-}
 
-// 从GitHub仓库加载课程数据
-async function loadCourseDataFromGitHub(repoUrl = 'https://raw.githubusercontent.com/yourusername/learning-platform/main/courseList/') {
-    try {
-        const response = await fetch(`${repoUrl}courseProgress.json`);
-        if (response.ok) {
-            const data = await response.json();
-            courseProgress = data;
-            localStorage.setItem('courseProgress', JSON.stringify(courseProgress));
-            console.log('课程数据已从GitHub仓库加载');
-            return true;
-        } else {
-            console.warn('从GitHub加载失败，使用localStorage中的数据');
-            return false;
-        }
-    } catch (error) {
-        console.error('从GitHub加载课程数据失败:', error);
-        return false;
-    }
-}
+
+
+
 
 // 初始化课程进度
 async function initializeApp() {
@@ -700,13 +647,25 @@ async function getGitHubFile(path) {
 // 保存文件到GitHub
 async function saveGitHubFile(path, content, message) {
     try {
-        const existingFile = await getGitHubFile(path);
+        // 先获取文件的sha值（如果存在）
+        let sha = null;
+        const getResponse = await fetch(`https://api.github.com/repos/${config.repoOwner}/${config.repoName}/contents/${path}`, {
+            headers: {
+                'Authorization': `token ${config.githubToken}`
+            }
+        });
+        
+        if (getResponse.ok) {
+            const existingFile = await getResponse.json();
+            sha = existingFile.sha;
+        }
+        
         const body = {
             message: message,
             content: btoa(unescape(encodeURIComponent(content)))
         };
         
-        if (existingFile) {
+        if (sha) {
             // 文件存在，更新
             const response = await fetch(`https://api.github.com/repos/${config.repoOwner}/${config.repoName}/contents/${path}`, {
                 method: 'PUT',
@@ -714,7 +673,7 @@ async function saveGitHubFile(path, content, message) {
                     'Authorization': `token ${config.githubToken}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ ...body, sha: existingFile.sha })
+                body: JSON.stringify({ ...body, sha })
             });
             return response.ok;
         } else {
@@ -871,11 +830,22 @@ async function sendMessage() {
         const courses = courseLines.map(line => {
             const match = line.match(/^(\d+)\.\s*课程名称：(.+?)，简介：(.+?)，难度：(.+?)$/);
             if (match) {
+                // 根据难度生成默认模块
+                let modules = [];
+                if (match[4] === '初级') {
+                    modules = ['基础知识', '概念理解', '简单应用'];
+                } else if (match[4] === '中级') {
+                    modules = ['核心原理', '实践应用', '案例分析'];
+                } else if (match[4] === '高级') {
+                    modules = ['高级特性', '深入理解', '综合应用', '优化技巧'];
+                }
+                
                 return {
                     id: match[1],
                     name: match[2],
                     description: match[3],
-                    difficulty: match[4]
+                    difficulty: match[4],
+                    modules: modules // 添加modules字段
                 };
             }
             return null;
@@ -886,6 +856,18 @@ async function sendMessage() {
             await saveCourseProgress();
             // 显示课程选择界面
             showCourseSelection();
+        }
+        
+        // 即使显示课程选择界面，也要将课程列表添加到对话历史
+        if (assistantResponse) {
+            // 显示助手回复
+            displayMessage('assistant', assistantResponse);
+            
+            // 添加助手回复到历史
+            conversation.push({ role: 'assistant', content: assistantResponse });
+            
+            // 保存对话
+            await saveTodaysConversation(conversation);
         }
     }
     // 检查是否是选择课程
@@ -924,15 +906,63 @@ async function generateReviewPlan() {
     }
     
     const resultDiv = document.getElementById('review-plan-result');
-    resultDiv.textContent = '正在生成复习计划...';
+    resultDiv.textContent = '正在生成个性化复习计划...';
+    
+    // 构建个性化学习数据
+    const today = new Date().toISOString();
+    
+    // 筛选与输入科目相关的学习数据
+    const relevantCourses = courseProgress.coursesLearned?.filter(course => 
+        course.name.includes(subject) || 
+        Object.values(course.moduleMastery || {}).some(module => module.name.includes(subject))
+    ) || [];
+    
+    // 收集相关模块数据
+    const relevantModules = [];
+    relevantCourses.forEach(course => {
+        if (course.moduleMastery) {
+            Object.values(course.moduleMastery).forEach(module => {
+                relevantModules.push({
+                    course: course.name,
+                    module: module.name,
+                    masteryLevel: module.masteryLevel,
+                    lastLearnedDate: module.lastLearnedDate,
+                    learningCount: module.learningCount,
+                    reviewCount: module.reviewCount,
+                    nextReviewDate: module.nextReviewDate,
+                    isOverdue: module.nextReviewDate && module.nextReviewDate <= today
+                });
+            });
+        }
+    });
+    
+    // 如果没有直接相关的课程，使用所有学习数据
+    const finalCourses = relevantCourses.length > 0 ? relevantCourses : courseProgress.coursesLearned || [];
+    const finalModules = relevantModules.length > 0 ? relevantModules : [];
     
     // 获取学习和复习方法提示词
     const learningEfficiency = await getGitHubFile('prompts/learning_efficiency.md');
     const forgettingCurve = await getGitHubFile('prompts/forgetting_curve.md');
     
-    // 构建提示词
+    // 构建个性化提示词
     const prompt = `
-        作为一个学习顾问，根据以下信息为${subject}制定基于高效学习方法论和遗忘曲线的复习计划：
+        作为一个学习顾问，根据以下个性化学习数据、高效学习方法论和遗忘曲线原理，为${subject}制定详细的复习计划：
+        
+        个性化学习数据：
+        1. 相关课程信息：
+        ${JSON.stringify(finalCourses.map(course => ({
+            name: course.name,
+            difficulty: course.difficulty,
+            firstLearnedDate: course.firstLearnedDate,
+            lastLearnedDate: course.lastLearnedDate,
+            learningCount: course.learningCount,
+            moduleCount: course.moduleMastery ? Object.keys(course.moduleMastery).length : 0
+        })), null, 2)}
+        
+        2. 相关模块详细数据：
+        ${finalModules.length > 0 ? JSON.stringify(finalModules, null, 2) : '暂无详细模块数据'}
+        
+        3. 当前日期：${today}
         
         高效学习方法论：
         ${learningEfficiency || '无高效学习方法提示词'}
@@ -940,12 +970,16 @@ async function generateReviewPlan() {
         遗忘曲线复习原理：
         ${forgettingCurve || '无遗忘曲线提示词'}
         
-        请制定一个详细的复习计划，包括：
-        1. 基于遗忘曲线的个性化复习间隔
-        2. 高效学习方法的应用建议
-        3. 每日复习内容和时间安排
-        4. 复习效果评估方法
-        5. 知识点优先级排序
+        请制定一个高度个性化的复习计划，包括：
+        1. 基于模块掌握度和遗忘曲线的个性化复习间隔
+        2. 针对每个模块的复习优先级（掌握度低、逾期未复习的模块优先）
+        3. 每日复习内容和合理的时间安排
+        4. 结合费曼学习法的高效复习方法建议
+        5. 复习效果评估方法（如何判断是否真正掌握）
+        6. 根据掌握度提升情况的动态调整策略
+        7. 短期（1周）和长期（1个月）复习目标
+        
+        请以清晰、结构化的方式呈现，突出个性化特点，语言通俗易懂，便于执行。
     `;
     
     // 调用通义千问API
@@ -960,11 +994,14 @@ async function generateReviewPlan() {
             data: {
                 subject: subject,
                 plan: plan,
-                date: new Date().toISOString()
+                date: new Date().toISOString(),
+                personalized: true,
+                relevantCourseCount: finalCourses.length,
+                relevantModuleCount: finalModules.length
             }
         });
     } else {
-        resultDiv.textContent = '生成复习计划失败，请检查API配置！';
+        resultDiv.textContent = '生成个性化复习计划失败，请检查API配置！';
     }
 }
 
@@ -1018,57 +1055,258 @@ async function generateExercises() {
     }
 }
 
+// 生成高效学习综合建议
+async function generateEfficientLearningSuggestions() {
+    let resultDiv = document.getElementById('learning-suggestions-result');
+    if (!resultDiv) {
+        // 如果没有结果显示区域，创建一个临时的
+        resultDiv = document.createElement('div');
+        resultDiv.id = 'learning-suggestions-result';
+        resultDiv.style.cssText = 'margin-top: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px;';
+        document.body.appendChild(resultDiv);
+    }
+    
+    resultDiv.textContent = '正在生成高效学习建议...';
+    
+    try {
+        // 构建完整的学习数据概览
+        const today = new Date().toISOString();
+        
+        // 计算整体学习统计
+        const totalCourses = courseProgress.coursesLearned?.length || 0;
+        const totalModules = courseProgress.coursesLearned?.reduce((count, course) => 
+            count + (course.moduleMastery ? Object.keys(course.moduleMastery).length : 0), 0
+        ) || 0;
+        const totalLearningSessions = courseProgress.learningHistory?.length || 0;
+        
+        // 识别需要复习的模块（按优先级排序）
+        const modulesToReview = [];
+        const masteredModules = [];
+        
+        courseProgress.coursesLearned?.forEach(course => {
+            if (course.moduleMastery) {
+                Object.values(course.moduleMastery).forEach(module => {
+                    if (module.nextReviewDate && module.nextReviewDate <= today) {
+                        modulesToReview.push({
+                            course: course.name,
+                            module: module.name,
+                            masteryLevel: module.masteryLevel,
+                            lastLearnedDate: module.lastLearnedDate,
+                            daysSinceLastReview: Math.ceil((new Date(today) - new Date(module.lastLearnedDate)) / (1000 * 60 * 60 * 24)),
+                            isUrgent: module.masteryLevel < 3 // 掌握度低的模块更紧急
+                        });
+                    } else if (module.masteryLevel >= 4) {
+                        masteredModules.push({
+                            course: course.name,
+                            module: module.name,
+                            masteryLevel: module.masteryLevel
+                        });
+                    }
+                });
+            }
+        });
+        
+        // 按优先级排序（掌握度低的模块优先）
+        modulesToReview.sort((a, b) => {
+            if (a.isUrgent && !b.isUrgent) return -1;
+            if (!a.isUrgent && b.isUrgent) return 1;
+            return a.masteryLevel - b.masteryLevel;
+        });
+        
+        // 分析学习模式
+        const recentLearningSessions = courseProgress.learningHistory?.slice(-10) || [];
+        const mostActiveCourses = {};
+        const mostActiveModules = {};
+        
+        recentLearningSessions.forEach(session => {
+            if (session.course) {
+                mostActiveCourses[session.course] = (mostActiveCourses[session.course] || 0) + 1;
+            }
+            if (session.module && session.module !== '全部内容') {
+                mostActiveModules[session.module] = (mostActiveModules[session.module] || 0) + 1;
+            }
+        });
+        
+        // 转换为数组并排序
+        const sortedCourses = Object.entries(mostActiveCourses)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 3);
+        
+        const sortedModules = Object.entries(mostActiveModules)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 5);
+        
+        // 获取高效学习和遗忘曲线提示词
+        const learningEfficiency = await getGitHubFile('prompts/learning_efficiency.md');
+        const forgettingCurve = await getGitHubFile('prompts/forgetting_curve.md');
+        
+        // 构建综合提示词
+        const prompt = `
+            作为一个资深学习顾问，基于以下全面的个性化学习数据、高效学习方法论和遗忘曲线原理，为用户生成一份综合性的高效学习建议报告：
+            
+            一、学习数据概览：
+            1. 整体统计：
+               - 已学习课程数：${totalCourses}
+               - 已学习模块数：${totalModules}
+               - 总学习次数：${totalLearningSessions}
+            
+            2. 当前需要复习的模块（按优先级排序，共${modulesToReview.length}个）：
+               ${modulesToReview.length > 0 ? JSON.stringify(modulesToReview.slice(0, 10), null, 2) : '暂无需要复习的模块'}
+            
+            3. 已掌握的模块（共${masteredModules.length}个）：
+               ${masteredModules.length > 0 ? JSON.stringify(masteredModules.slice(0, 10), null, 2) : '暂无完全掌握的模块'}
+            
+            4. 近期学习活跃情况：
+               - 最近学习最多的课程：${sortedCourses.map(([course, count]) => `${course} (${count}次)`).join(', ') || '暂无学习记录'}
+               - 最近学习最多的模块：${sortedModules.map(([module, count]) => `${module} (${count}次)`).join(', ') || '暂无学习记录'}
+            
+            5. 最近10次学习记录：
+               ${JSON.stringify(recentLearningSessions, null, 2)}
+            
+            二、学习原理参考：
+            1. 高效学习方法论：
+               ${learningEfficiency || '无高效学习方法提示词'}
+            
+            2. 遗忘曲线原理：
+               ${forgettingCurve || '无遗忘曲线提示词'}
+            
+            三、建议生成要求：
+            请基于以上数据和原理，生成一份结构清晰、实用性强的高效学习建议报告，包括但不限于：
+            
+            1. 个性化学习状态评估：
+               - 优点和进步点
+               - 需要改进的地方
+               - 整体学习效率评分
+            
+            2. 紧急复习计划（接下来7天）：
+               - 每日需要复习的模块和时间建议
+               - 针对每个模块的复习方法推荐
+            
+            3. 长期学习策略（1个月）：
+               - 学习内容优先级排序
+               - 新模块学习与旧模块复习的平衡建议
+               - 学习目标设定建议
+            
+            4. 学习方法个性化推荐：
+               - 根据学习历史和模块类型推荐最合适的学习方法
+               - 如何结合费曼学习法、番茄工作法等提高效率
+            
+            5. 模块掌握度提升建议：
+               - 针对不同掌握度的模块制定不同的学习策略
+               - 如何将掌握度从低级别提升到高级别
+            
+            6. 学习习惯养成建议：
+               - 如何建立可持续的学习习惯
+               - 如何保持学习动力
+            
+            请以自然、友好的语言呈现，避免过于技术化的术语，确保用户能够轻松理解和执行这些建议。
+        `;
+        
+        // 调用通义千问API
+        const suggestions = await tongyiApiCall([{ role: 'user', content: prompt }]);
+        
+        if (suggestions) {
+            resultDiv.textContent = suggestions;
+        } else {
+            resultDiv.textContent = '生成高效学习建议失败，请检查API配置！';
+        }
+        
+    } catch (error) {
+        console.error('生成高效学习建议错误:', error);
+        resultDiv.textContent = `生成高效学习建议失败: ${error.message}`;
+    }
+}
+
+// 根据掌握度计算下次复习日期（基于遗忘曲线原理）
+function calculateNextReviewDate(masteryLevel) {
+    // 掌握度越高，复习间隔越长
+    const intervals = {
+        1: 1,    // 掌握度1级：1天后复习
+        2: 3,    // 掌握度2级：3天后复习
+        3: 7,    // 掌握度3级：7天后复习
+        4: 14,   // 掌握度4级：14天后复习
+        5: 30    // 掌握度5级：30天后复习
+    };
+    
+    // 找到最接近的掌握度区间
+    const masteryKey = Math.min(Math.ceil(masteryLevel), 5);
+    const daysToAdd = intervals[masteryKey] || 1;
+    
+    const nextDate = new Date();
+    nextDate.setDate(nextDate.getDate() + daysToAdd);
+    return nextDate.toISOString();
+}
+
 // 生成加强记忆的知识点
 async function generateMemoryPoints() {
     const resultDiv = document.getElementById('memory-points-result');
     resultDiv.textContent = '正在分析学习历史并生成加强记忆的知识点...';
     
     try {
-        // 获取所有历史对话记录
-        const response = await fetch(`https://api.github.com/repos/${config.repoOwner}/${config.repoName}/contents/conversations`, {
-            headers: {
-                'Authorization': `token ${config.githubToken}`
-            }
-        });
+        // 构建个性化学习历史数据
+        let learningHistoryData = {
+            learningHistory: courseProgress.learningHistory || [],
+            coursesLearned: courseProgress.coursesLearned || [],
+            currentDate: new Date().toISOString()
+        };
         
-        if (!response.ok) {
-            throw new Error('获取学习历史失败');
-        }
+        // 获取需要复习的模块
+        const modulesToReview = [];
+        const today = new Date().toISOString();
         
-        const files = await response.json();
-        let allConversations = '';
-        
-        // 获取每个对话文件的内容
-        for (const file of files) {
-            const content = await getGitHubFile(file.path);
-            if (content) {
-                const messages = JSON.parse(content);
-                // 提取对话内容，按时间排序
-                const conversationText = messages.map(msg => `${msg.role === 'user' ? '用户' : '助手'}: ${msg.content}`).join('\n');
-                allConversations += `\n=== ${file.name.replace('.json', '')} ===\n${conversationText}\n`;
-            }
+        if (learningHistoryData.coursesLearned) {
+            learningHistoryData.coursesLearned.forEach(course => {
+                if (course.moduleMastery) {
+                    Object.values(course.moduleMastery).forEach(module => {
+                        if (module.nextReviewDate && module.nextReviewDate <= today) {
+                            modulesToReview.push({
+                                course: course.name,
+                                module: module.name,
+                                masteryLevel: module.masteryLevel,
+                                lastLearnedDate: module.lastLearnedDate,
+                                learningCount: module.learningCount
+                            });
+                        }
+                    });
+                }
+            });
         }
         
         // 获取遗忘曲线提示词
         const forgettingCurve = await getGitHubFile('prompts/forgetting_curve.md');
         
-        // 构建提示词
+        // 构建个性化提示词
         const prompt = `
-            作为一个学习顾问，基于以下学习历史记录和遗忘曲线原理，分析并生成需要加强记忆的知识点：
+            作为一个学习顾问，基于以下个性化学习数据和遗忘曲线原理，分析并生成需要加强记忆的知识点：
             
-            学习历史记录：
-            ${allConversations}
+            个性化学习数据：
+            1. 学习历史记录（最近10条）：
+            ${JSON.stringify(learningHistoryData.learningHistory.slice(-10), null, 2)}
+            
+            2. 已学习课程概况：
+            ${JSON.stringify(learningHistoryData.coursesLearned.map(course => ({
+                name: course.name,
+                difficulty: course.difficulty,
+                learningCount: course.learningCount,
+                moduleCount: course.moduleMastery ? Object.keys(course.moduleMastery).length : 0
+            })), null, 2)}
+            
+            3. 当前需要复习的模块（基于掌握度和复习间隔）：
+            ${modulesToReview.length > 0 ? JSON.stringify(modulesToReview, null, 2) : '暂无需要复习的模块'}
+            
+            4. 当前日期：${learningHistoryData.currentDate}
             
             遗忘曲线原理：
             ${forgettingCurve || '无遗忘曲线提示词'}
             
-            请分析这些学习记录，找出：
-            1. 关键知识点
-            2. 可能已经遗忘的内容
-            3. 需要加强记忆的重点
-            4. 基于遗忘曲线的复习建议
+            请分析这些数据，为用户生成个性化的加强记忆知识点：
+            1. 基于掌握度的知识点优先级排序（掌握度低的知识点优先）
+            2. 需要立即复习的内容（根据下次复习日期）
+            3. 每个知识点的记忆方法建议（结合费曼学习法等）
+            4. 基于遗忘曲线的复习计划
+            5. 提高掌握度的具体学习建议
             
-            请以清晰的结构呈现，突出需要加强记忆的知识点。
+            请以清晰的结构呈现，突出个性化的学习建议，语言通俗易懂。
         `;
         
         // 调用通义千问API
@@ -1124,6 +1362,292 @@ function showCourseSelection() {
         // 显示对话面板
         document.getElementById('chat-container').classList.remove('hidden');
     };
+}
+
+// 显示课程选择下拉框界面
+function showCourseSelectInterface() {
+    // 隐藏所有其他面板
+    document.querySelectorAll('.content-panel').forEach(panel => {
+        panel.classList.add('hidden');
+    });
+    // 显示课程选择面板
+    document.getElementById('course-select-container').classList.remove('hidden');
+    
+    // 更新课程下拉框
+    updateCourseDropdown();
+    
+    // 添加事件监听
+    document.getElementById('back-to-main-btn').onclick = () => {
+        // 隐藏课程选择面板
+        document.getElementById('course-select-container').classList.add('hidden');
+        // 显示对话面板
+        document.getElementById('chat-container').classList.remove('hidden');
+    };
+    
+    // 添加课程选择事件
+    document.getElementById('course-dropdown').onchange = () => {
+        updateCourseModuleDropdown();
+    };
+    
+    // 添加开始学习按钮事件
+    document.getElementById('start-learning-btn').onclick = () => {
+        startSelectedCourseLearning();
+    };
+}
+
+
+
+// 更新课程下拉框
+function updateCourseDropdown() {
+    const courseDropdown = document.getElementById('course-dropdown');
+    // 清空现有选项
+    courseDropdown.innerHTML = '<option value="" selected disabled>请选择课程</option>';
+    
+    if (!courseProgress.availableCourses || courseProgress.availableCourses.length === 0) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = '暂无可用课程';
+        option.disabled = true;
+        courseDropdown.appendChild(option);
+        return;
+    }
+    
+    // 按难度分组课程
+    const coursesByDifficulty = {
+        '初级': [],
+        '中级': [],
+        '高级': []
+    };
+    
+    courseProgress.availableCourses.forEach(course => {
+        const difficulty = course.difficulty || '初级';
+        if (coursesByDifficulty[difficulty]) {
+            coursesByDifficulty[difficulty].push(course);
+        } else {
+            coursesByDifficulty['初级'].push(course);
+        }
+    });
+    
+    // 添加课程选项
+    ['初级', '中级', '高级'].forEach(difficulty => {
+        if (coursesByDifficulty[difficulty].length > 0) {
+            const optgroup = document.createElement('optgroup');
+            optgroup.label = difficulty;
+            courseDropdown.appendChild(optgroup);
+            
+            coursesByDifficulty[difficulty].forEach(course => {
+                const option = document.createElement('option');
+                option.value = course.id;
+                option.textContent = course.name;
+                option.dataset.description = course.description;
+                option.dataset.difficulty = course.difficulty;
+                optgroup.appendChild(option);
+            });
+        }
+    });
+}
+
+// 更新课程选择界面的模块下拉框
+function updateCourseModuleDropdown() {
+    const courseDropdown = document.getElementById('course-dropdown');
+    const moduleDropdown = document.getElementById('module-dropdown');
+    const selectedCourseId = courseDropdown.value;
+    
+    // 清空现有选项
+    moduleDropdown.innerHTML = '<option value="" selected disabled>请选择模块</option>';
+    
+    if (!selectedCourseId) {
+        return;
+    }
+    
+    // 从课程数据中获取模块
+    const selectedCourse = courseProgress.availableCourses.find(course => course.id === selectedCourseId);
+    if (!selectedCourse || !selectedCourse.modules || selectedCourse.modules.length === 0) {
+        return;
+    }
+    
+    // 使用课程自带的模块列表
+    selectedCourse.modules.forEach((module, index) => {
+        const option = document.createElement('option');
+        option.value = index + 1;
+        option.textContent = module;
+        moduleDropdown.appendChild(option);
+    });
+    
+    // 添加自定义模块按钮
+    const customOption = document.createElement('option');
+    customOption.value = 'custom';
+    customOption.textContent = '自定义模块...';
+    moduleDropdown.appendChild(customOption);
+}
+
+// 开始学习选定的课程
+async function startSelectedCourseLearning() {
+    const courseDropdown = document.getElementById('course-dropdown');
+    const moduleDropdown = document.getElementById('module-dropdown');
+    const selectedCourseId = courseDropdown.value;
+    const selectedModuleValue = moduleDropdown.value;
+    
+    if (!selectedCourseId || !selectedModuleValue) {
+        alert('请选择课程和模块！');
+        return;
+    }
+    
+    // 获取选定的课程
+    const selectedCourse = courseProgress.availableCourses.find(course => course.id === selectedCourseId);
+    if (!selectedCourse) {
+        alert('未找到选定的课程！');
+        return;
+    }
+    
+    let selectedModule = moduleDropdown.options[moduleDropdown.selectedIndex].textContent;
+    
+    // 处理用户选择自定义模块的情况
+    if (selectedModuleValue === 'custom') {
+        const customModuleName = prompt('请输入自定义模块名称：');
+        if (!customModuleName || customModuleName.trim() === '') {
+            alert('请输入有效的模块名称！');
+            return;
+        }
+        
+        selectedModule = customModuleName.trim();
+        
+        // 将自定义模块添加到课程的模块列表中
+        if (!selectedCourse.modules.includes(selectedModule)) {
+            selectedCourse.modules.push(selectedModule);
+            // 保存更新后的课程数据
+            await saveCourseProgress();
+            // 更新模块下拉框
+            updateCourseModuleDropdown();
+        }
+    }
+    
+    // 调用费曼学习法开始学习
+    await startFeynmanLearning(selectedCourse, selectedModule);
+}
+
+// 修改startFeynmanLearning函数以支持模块学习
+async function startFeynmanLearning(course, module = null) {
+    // 显示加载状态
+    const loadingIndicator = document.createElement('div');
+    loadingIndicator.className = 'loading-indicator';
+    loadingIndicator.textContent = '正在准备费曼学习法教学...';
+    loadingIndicator.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        padding: 20px;
+        background-color: rgba(255, 255, 255, 0.9);
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        font-size: 16px;
+        z-index: 1000;
+    `;
+    document.body.appendChild(loadingIndicator);
+    
+    try {
+        // 生成费曼学习法教学内容
+        let contentPrompt = `请用费曼学习法教我学习：${course.name}。课程简介：${course.description}`;
+        if (module) {
+            contentPrompt += `\n\n具体学习模块：${module}`;
+        }
+        
+        const feynmanPrompt = [{
+            role: 'system',
+            content: '你是一个优秀的费曼学习法教师，请按照以下步骤教授用户选择的课程：\n1. 首先用5岁孩子能理解的简单语言解释课程的核心概念，避免使用任何专业术语\n2. 指出解释中可能存在的模糊点或未解释清楚的地方\n3. 回到课程内容，重新解释这些模糊点，确保用户完全理解\n4. 最后提供一个简洁明了的总结，强化学习效果\n\n如果用户指定了具体模块，请重点教授该模块的内容。\n\n请确保教学内容生动有趣，符合费曼学习法的"以教促学"理念。'
+        }, {
+            role: 'user',
+            content: contentPrompt
+        }];
+        
+        const teachingContent = await tongyiApiCall(feynmanPrompt);
+        
+        // 记录学习历史
+        courseProgress.learningHistory.push({
+            course: course.name,
+            courseId: course.id,
+            module: module || '全部内容',
+            date: new Date().toISOString(),
+            content: teachingContent,
+            method: 'feynman',
+            masteryLevel: 1 // 初始掌握度为1（1-5级）
+        });
+        
+        // 更新课程学习进度
+        if (!courseProgress.coursesLearned) {
+            courseProgress.coursesLearned = [];
+        }
+        
+        const existingCourse = courseProgress.coursesLearned.find(c => c.id === course.id);
+        if (!existingCourse) {
+            courseProgress.coursesLearned.push({
+                id: course.id,
+                name: course.name,
+                difficulty: course.difficulty,
+                firstLearnedDate: new Date().toISOString(),
+                lastLearnedDate: new Date().toISOString(),
+                learningCount: 1,
+                moduleMastery: {} // 添加模块掌握度跟踪
+            });
+        } else {
+            existingCourse.lastLearnedDate = new Date().toISOString();
+            existingCourse.learningCount = (existingCourse.learningCount || 0) + 1;
+            // 初始化模块掌握度对象
+            if (!existingCourse.moduleMastery) {
+                existingCourse.moduleMastery = {};
+            }
+        }
+        
+        // 更新模块掌握度
+        if (module) {
+            const courseInProgress = courseProgress.coursesLearned.find(c => c.id === course.id);
+            if (!courseInProgress.moduleMastery[module]) {
+                courseInProgress.moduleMastery[module] = {
+                    name: module,
+                    lastLearnedDate: new Date().toISOString(),
+                    learningCount: 1,
+                    masteryLevel: 1, // 1-5级，5级为完全掌握
+                    reviewCount: 0,
+                    nextReviewDate: calculateNextReviewDate(1) // 基于掌握度计算下次复习日期
+                };
+            } else {
+                const moduleMastery = courseInProgress.moduleMastery[module];
+                moduleMastery.lastLearnedDate = new Date().toISOString();
+                moduleMastery.learningCount++;
+                // 根据学习次数和时间间隔提升掌握度（简单规则）
+                if (moduleMastery.masteryLevel < 5) {
+                    moduleMastery.masteryLevel += 0.5;
+                    if (moduleMastery.masteryLevel > 5) moduleMastery.masteryLevel = 5;
+                }
+                moduleMastery.nextReviewDate = calculateNextReviewDate(moduleMastery.masteryLevel);
+            }
+        }
+        
+        // 保存课程进度
+        await saveCourseProgress();
+        
+        // 返回对话界面并显示教学内容
+        document.querySelectorAll('.content-panel').forEach(panel => {
+            panel.classList.add('hidden');
+        });
+        document.getElementById('chat-container').classList.remove('hidden');
+        
+        // 显示教学内容
+        displayMessage('assistant', teachingContent);
+        
+        // 添加到对话历史
+        let conversation = await loadTodaysConversation();
+        conversation.push({ role: 'assistant', content: teachingContent });
+        await saveTodaysConversation(conversation);
+        
+    } catch (error) {
+        console.error('费曼学习法教学失败:', error);
+        alert('生成教学内容失败，请稍后重试。');
+    } finally {
+        // 移除加载状态
+        document.body.removeChild(loadingIndicator);
+    }
 }
 
 // 生成课程列表
@@ -2259,12 +2783,14 @@ document.addEventListener('DOMContentLoaded', () => {
         switchPanel('mastery-container');
         updateSubjectModuleDropdowns();
     });
+    document.getElementById('learning-suggestions-btn').addEventListener('click', () => switchPanel('learning-suggestions-container'));
     document.getElementById('reminder-btn').addEventListener('click', () => {
         switchPanel('reminder-container');
         displayUpcomingReminders();
         displayPendingReviewTopics();
     });
     document.getElementById('prompts-btn').addEventListener('click', () => switchPanel('prompts-container'));
+    document.getElementById('select-course-btn').addEventListener('click', () => showCourseSelectInterface());
     
     // 功能按钮事件
     document.getElementById('generate-plan-btn').addEventListener('click', generateReviewPlan);
@@ -2274,6 +2800,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('generate-assessment-btn').addEventListener('click', generateAssessment);
     document.getElementById('submit-assessment-btn').addEventListener('click', submitAssessment);
     document.getElementById('save-reminder-settings').addEventListener('click', saveReminderSettings);
+    document.getElementById('generate-suggestions-btn').addEventListener('click', generateEfficientLearningSuggestions);
     
     // 定时加载历史记录
     setInterval(loadHistory, 10000);
