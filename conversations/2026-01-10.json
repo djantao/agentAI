@@ -18,5 +18,9 @@
   {
     "role": "assistant",
     "content": "1. 课程名称：SparkSQL基础入门，简介：掌握SparkSQL的基本概念和核心功能，为后续学习打下基础，难度：初级  \n2. 课程名称：数据读写与DataFrame操作，简介：学习如何使用DataFrame进行数据读写和基本操作，提升数据处理能力，难度：初级  \n3. 课程名称：SparkSQL查询与优化，简介：深入理解SparkSQL的查询语法及性能优化技巧，提升查询效率，难度：中级  \n4. 课程名称：SparkSQL与Hive集成，简介：学习如何将SparkSQL与Hive结合使用，实现数据仓库的高效处理，难度：中级  \n5. 课程名称：SparkSQL高级特性与实战，简介：掌握SparkSQL的窗口函数、UDF等高级功能，并进行实际项目演练，难度：高级  \n6. 课程名称：SparkSQL性能调优与架构设计，简介：深入学习SparkSQL的性能调优策略与分布式架构设计，提升系统稳定性，难度：高级"
+  },
+  {
+    "role": "assistant",
+    "content": "1. 课程名称：SparkSQL基础入门，简介：掌握SparkSQL的基本概念和核心功能，为后续学习打下基础，难度：初级  \n2. 课程名称：数据读写与DataFrame操作，简介：学习如何使用DataFrame进行数据读写和基本操作，提升数据处理能力，难度：初级  \n3. 课程名称：SparkSQL查询与优化，简介：深入理解SparkSQL的查询语法及性能优化技巧，提升查询效率，难度：中级  \n4. 课程名称：SparkSQL与Hive集成，简介：学习如何将SparkSQL与Hive结合使用，实现数据仓库的高效处理，难度：中级  \n5. 课程名称：SparkSQL高级特性与实战，简介：掌握SparkSQL的窗口函数、UDF等高级功能，并进行实际项目演练，难度：高级  \n6. 课程名称：SparkSQL性能调优与架构设计，简介：深入学习SparkSQL的性能调优策略与分布式架构设计，提升系统稳定性，难度：高级"
   }
 ]
