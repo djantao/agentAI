@@ -25,29 +25,25 @@ let courseProgress = {
 // 检查并创建GitHub目录（通过创建.gitkeep文件）
 async function ensureGitHubDirectory(directoryPath) {
     try {
+        // 检查配置是否完整
+        if (!config.githubToken || !config.repoOwner || !config.repoName) {
+            console.warn('GitHub配置不完整，无法确保目录存在');
+            return false;
+        }
+        
         // 创建.gitkeep文件来确保目录存在
         const filePath = `${directoryPath}/.gitkeep`;
         const content = '';
         const message = `Ensure directory ${directoryPath} exists`;
         
-        // 尝试获取目录是否存在
-        const getResponse = await fetch(`https://api.github.com/repos/${config.repoOwner}/${config.repoName}/contents/${filePath}`, {
-            headers: {
-                'Authorization': `token ${config.githubToken}`
-            }
-        });
-        
-        // 如果目录不存在（404），创建.gitkeep文件
-        if (getResponse.status === 404) {
-            const success = await saveGitHubFile(filePath, content, message);
-            return success;
-        }
-        
-        // 目录已经存在
-        return true;
+        // 直接尝试创建.gitkeep文件，不管目录是否存在
+        // GitHub API会自动创建不存在的父目录
+        const success = await saveGitHubFile(filePath, content, message);
+        return success;
     } catch (error) {
         console.error('确保GitHub目录存在时发生错误:', error);
-        return false;
+        // 即使目录创建失败，也尝试继续保存文件，因为GitHub API可能会自动创建目录
+        return true;
     }
 }
 
@@ -823,42 +819,6 @@ async function sendMessage() {
         
         assistantResponse = await tongyiApiCall(coursePrompt);
         
-        // 保存课程列表到courseProgress
-        courseProgress.availableCourses = courseProgress.availableCourses || [];
-        // 尝试解析生成的课程列表
-        const courseLines = assistantResponse.split('\n').filter(line => line.match(/^\d+\./));
-        const courses = courseLines.map(line => {
-            const match = line.match(/^(\d+)\.\s*课程名称：(.+?)，简介：(.+?)，难度：(.+?)$/);
-            if (match) {
-                // 根据难度生成默认模块
-                let modules = [];
-                if (match[4] === '初级') {
-                    modules = ['基础知识', '概念理解', '简单应用'];
-                } else if (match[4] === '中级') {
-                    modules = ['核心原理', '实践应用', '案例分析'];
-                } else if (match[4] === '高级') {
-                    modules = ['高级特性', '深入理解', '综合应用', '优化技巧'];
-                }
-                
-                return {
-                    id: match[1],
-                    name: match[2],
-                    description: match[3],
-                    difficulty: match[4],
-                    modules: modules // 添加modules字段
-                };
-            }
-            return null;
-        }).filter(Boolean);
-        
-        if (courses.length > 0) {
-            courseProgress.availableCourses = courses;
-            await saveCourseProgress();
-            // 显示课程选择界面
-            showCourseSelection();
-        }
-        
-        // 即使显示课程选择界面，也要将课程列表添加到对话历史
         if (assistantResponse) {
             // 显示助手回复
             displayMessage('assistant', assistantResponse);
@@ -867,6 +827,47 @@ async function sendMessage() {
             conversation.push({ role: 'assistant', content: assistantResponse });
             
             // 保存对话
+            await saveTodaysConversation(conversation);
+            
+            // 保存课程列表到courseProgress
+            courseProgress.availableCourses = courseProgress.availableCourses || [];
+            // 尝试解析生成的课程列表
+            const courseLines = assistantResponse.split('\n').filter(line => line.match(/^\d+\./));
+            const courses = courseLines.map(line => {
+                const match = line.match(/^(\d+)\.\s*课程名称：(.+?)，简介：(.+?)，难度：(.+?)$/);
+                if (match) {
+                    // 根据难度生成默认模块
+                    let modules = [];
+                    if (match[4] === '初级') {
+                        modules = ['基础知识', '概念理解', '简单应用'];
+                    } else if (match[4] === '中级') {
+                        modules = ['核心原理', '实践应用', '案例分析'];
+                    } else if (match[4] === '高级') {
+                        modules = ['高级特性', '深入理解', '综合应用', '优化技巧'];
+                    }
+                    
+                    return {
+                        id: match[1],
+                        name: match[2],
+                        description: match[3],
+                        difficulty: match[4],
+                        modules: modules // 添加modules字段
+                    };
+                }
+                return null;
+            }).filter(Boolean);
+            
+            if (courses.length > 0) {
+                courseProgress.availableCourses = courses;
+                await saveCourseProgress();
+                // 延迟显示课程选择界面，确保对话已保存
+                setTimeout(() => showCourseSelection(), 500);
+            }
+        } else {
+            // 如果API调用失败，显示错误信息
+            const errorMessage = '很抱歉，我暂时无法生成课程列表。请检查API配置或稍后重试。';
+            displayMessage('assistant', errorMessage);
+            conversation.push({ role: 'assistant', content: errorMessage });
             await saveTodaysConversation(conversation);
         }
     }
@@ -883,17 +884,23 @@ async function sendMessage() {
     else {
         // 调用通义千问API
         assistantResponse = await tongyiApiCall(conversation);
-    }
-    
-    if (assistantResponse) {
-        // 显示助手回复
-        displayMessage('assistant', assistantResponse);
         
-        // 添加助手回复到历史
-        conversation.push({ role: 'assistant', content: assistantResponse });
-        
-        // 保存对话
-        await saveTodaysConversation(conversation);
+        if (assistantResponse) {
+            // 显示助手回复
+            displayMessage('assistant', assistantResponse);
+            
+            // 添加助手回复到历史
+            conversation.push({ role: 'assistant', content: assistantResponse });
+            
+            // 保存对话
+            await saveTodaysConversation(conversation);
+        } else {
+            // 如果API调用失败，显示错误信息
+            const errorMessage = '很抱歉，我暂时无法提供回复。请检查API配置或稍后重试。';
+            displayMessage('assistant', errorMessage);
+            conversation.push({ role: 'assistant', content: errorMessage });
+            await saveTodaysConversation(conversation);
+        }
     }
 }
 
