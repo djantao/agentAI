@@ -1,5 +1,11 @@
 {
-  "name": "agentai-proxy-2026",
+  "name": "agentai-proxy",
   "compatibility_date": "2026-01-07",
-  "main": "./worker.js"
+  "main": "./worker.js",
+  "vars": {
+    "NOTION_API_KEY": ""
+  },
+  "secrets": [
+    "NOTION_API_KEY"
+  ]
 }

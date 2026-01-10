@@ -69,7 +69,7 @@
    ```
    （首次部署可能需要几分钟时间）
 
-## 四、配置Cloudflare Workers（解决跨域问题）
+## 四、配置Cloudflare Workers（解决跨域问题和保护API密钥）
 
 ### 1. 注册Cloudflare账号
 
@@ -81,16 +81,28 @@
 
 1. 登录后，点击左侧菜单中的「Workers & Pages」
 2. 点击「Create application」→「Create Worker」
-3. 输入Worker名称（如 `tongyi-proxy`），点击「Deploy」
+3. 输入Worker名称（如 `agentai-proxy`），点击「Deploy」
 4. 部署完成后，点击「Edit code」进入编辑器
 5. 在编辑器中，删除默认代码
 6. 复制项目中 `worker.js` 文件的全部内容粘贴进去
 7. 点击「Deploy」按钮重新部署
 
-### 3. 获取Worker URL
+### 3. 配置Notion API密钥环境变量
+
+为了安全存储Notion API密钥，我们需要将其配置为Workers的环境变量：
+
+1. 在Workers详情页面，点击「Settings」标签页
+2. 选择「Variables」选项卡
+3. 在「Secret variables」部分，点击「Add variable」
+4. 配置以下环境变量：
+   - **变量名称**：`NOTION_API_KEY`
+   - **变量值**：粘贴您的Notion API密钥（例如：`ntn_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`）
+5. 点击「Save and deploy」按钮保存配置
+
+### 4. 获取Worker URL
 
 - 部署成功后，在Workers详情页面可以看到Worker URL
-- 复制该URL（如：`https://tongyi-proxy.your-username.workers.dev`）
+- 复制该URL（如：`https://agentai-proxy.your-username.workers.dev`）
 
 ## 五、使用应用
 
@@ -105,8 +117,13 @@
      - **通义千问API Key**：您的阿里云通义千问API密钥
      - **仓库所有者**：您的GitHub用户名
      - **仓库名称**：您创建的仓库名称
-     - **代理服务器地址**：您刚才获取的Cloudflare Workers URL
+     - **代理服务器地址**：您刚才获取的Cloudflare Workers URL（用于通义千问API）
+     - **Notion代理地址**：您刚才获取的Cloudflare Workers URL（用于Notion API）
    - 点击「保存配置」按钮
+
+   注意：
+   - 如果您使用了Cloudflare Workers代理，Notion API密钥不需要在前端配置，因为密钥已安全存储在Workers环境变量中
+   - 如果您选择不使用代理，可以直接在前端配置Notion API密钥（不推荐，因为存在安全风险）
 
 3. 开始使用功能：
    - 「与AI对话」：与通义千问进行学习和复习对话

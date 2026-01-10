@@ -8,6 +8,7 @@ let config = {
     aiModel: 'qwen-turbo',
     notionApiKey: '',
     notionDatabaseId: '',
+    notionProxyUrl: '',
     webhookUrl: '',
     uiStyle: 'github'
 };
@@ -327,40 +328,158 @@ async function initializeApp() {
     loadConfig();
 }
 
+// 开始复习
+async function startReview() {
+    const reviewMethod = document.getElementById('review-method').value;
+    const subject = document.getElementById('subject-input').value;
+    const module = document.getElementById('module-input').value;
+    
+    // 隐藏复习方式选择界面
+    const reviewMethodSelection = document.getElementById('review-method-selection');
+    reviewMethodSelection.classList.add('hidden');
+    
+    // 显示复习评估界面
+    const reviewAssessment = document.getElementById('review-assessment');
+    reviewAssessment.classList.remove('hidden');
+    
+    // 如果选择的是做习题，可以在这里生成习题
+    if (reviewMethod === '习题') {
+        const exerciseSubject = document.getElementById('exercise-subject');
+        const exerciseTopic = document.getElementById('exercise-topic');
+        const exerciseDifficulty = document.getElementById('exercise-difficulty');
+        const exerciseCount = document.getElementById('exercise-count');
+        
+        // 设置习题生成参数
+        exerciseSubject.value = subject;
+        exerciseTopic.value = module;
+        exerciseDifficulty.value = 'medium';
+        exerciseCount.value = '5';
+        
+        // 生成习题
+        await generateExercises();
+    }
+}
+
+// 保存复习记录
+async function saveReviewRecord() {
+    const subject = document.getElementById('subject-input').value;
+    const module = document.getElementById('module-input').value;
+    const reviewMethod = document.getElementById('review-method').value;
+    const reviewEffect = document.getElementById('review-effect').value;
+    const assessmentResult = document.getElementById('assessment-result').value;
+    
+    // 计算复习时长（简单估算，实际可以根据开始和结束时间计算）
+    const reviewDuration = 30; // 分钟
+    
+    // 创建复习记录
+    const reviewRecord = {
+        courseName: subject,
+        chapterName: module,
+        reviewDate: new Date().toISOString(),
+        reviewMethod: reviewMethod,
+        reviewDuration: reviewDuration,
+        reviewEffect: reviewEffect,
+        assessmentResult: assessmentResult,
+        masteryLevel: reviewEffect,
+        status: '已完成'
+    };
+    
+    // 计算下次复习日期
+    reviewRecord.nextReviewDate = calculateNextReviewDate(reviewRecord.reviewDate, reviewEffect);
+    
+    // 保存到Notion复习情况表
+    if (config.notionApiKey && notionDatabaseIds.reviewRecords) {
+        const result = await saveReviewRecordToNotion(reviewRecord);
+        if (result) {
+            alert('复习记录已成功保存到Notion！');
+        } else {
+            alert('保存复习记录失败，请检查Notion配置！');
+        }
+    } else {
+        // 如果Notion不可用，保存到本地
+        alert('Notion配置未完成，复习记录将保存在本地！');
+    }
+    
+    // 隐藏复习评估界面
+    const reviewAssessment = document.getElementById('review-assessment');
+    reviewAssessment.classList.add('hidden');
+    
+    // 清空输入框
+    document.getElementById('assessment-result').value = '';
+}
+
 // 页面加载完成后初始化应用
-document.addEventListener('DOMContentLoaded', initializeApp);
+document.addEventListener('DOMContentLoaded', function() {
+    initializeApp();
+    
+    // 添加复习相关事件监听器
+    const startReviewBtn = document.getElementById('start-review-btn');
+    if (startReviewBtn) {
+        startReviewBtn.addEventListener('click', startReview);
+    }
+    
+    const saveReviewBtn = document.getElementById('save-review-btn');
+    if (saveReviewBtn) {
+        saveReviewBtn.addEventListener('click', saveReviewRecord);
+    }
+});
 
 // Notion API调用函数
 async function notionApiCall(endpoint, method = 'GET', body = null) {
     try {
-        if (!config.notionApiKey || !config.notionDatabaseId) {
-            alert('未配置Notion API密钥或数据库ID！');
-            return null;
+        // 检查是否配置了代理URL
+        if (!config.notionProxyUrl) {
+            // 如果没有配置代理，使用直接调用（保留向后兼容）
+            if (!config.notionApiKey) {
+                alert('未配置Notion API密钥或代理URL！');
+                return null;
+            }
+            
+            const url = `https://api.notion.com/v1${endpoint}`;
+            const headers = {
+                'Authorization': `Bearer ${config.notionApiKey}`,
+                'Content-Type': 'application/json',
+                'Notion-Version': '2022-06-28'
+            };
+            
+            const options = {
+                method,
+                headers
+            };
+            
+            if (body) {
+                options.body = JSON.stringify(body);
+            }
+            
+            const response = await fetch(url, options);
+            
+            if (!response.ok) {
+                throw new Error(`Notion API错误: ${response.status} ${await response.text()}`);
+            }
+            
+            return await response.json();
+        } else {
+            // 使用代理调用Notion API
+            const proxyUrl = `${config.notionProxyUrl}/notion${endpoint}`;
+            const options = {
+                method,
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            };
+            
+            if (body) {
+                options.body = JSON.stringify(body);
+            }
+            
+            const response = await fetch(proxyUrl, options);
+            
+            if (!response.ok) {
+                throw new Error(`Notion代理API错误: ${response.status} ${await response.text()}`);
+            }
+            
+            return await response.json();
         }
-        
-        const url = `https://api.notion.com/v1${endpoint}`;
-        const headers = {
-            'Authorization': `Bearer ${config.notionApiKey}`,
-            'Content-Type': 'application/json',
-            'Notion-Version': '2022-06-28'
-        };
-        
-        const options = {
-            method,
-            headers
-        };
-        
-        if (body) {
-            options.body = JSON.stringify(body);
-        }
-        
-        const response = await fetch(url, options);
-        
-        if (!response.ok) {
-            throw new Error(`Notion API错误: ${response.status} ${await response.text()}`);
-        }
-        
-        return await response.json();
     } catch (error) {
         console.error('Notion API调用失败:', error);
         alert(`Notion API调用失败: ${error.message}`);
@@ -368,7 +487,659 @@ async function notionApiCall(endpoint, method = 'GET', body = null) {
     }
 }
 
-// 同步学习进度到Notion
+// Notion 数据库相关配置（用于不同功能的数据库ID）
+let notionDatabaseIds = {
+    courseTable: '',        // 课程表
+    learningRecords: '',    // 学习记录表
+    reviewRecords: ''       // 复习情况表
+};
+
+// 保存Notion数据库ID配置
+function saveNotionDatabaseIds() {
+    localStorage.setItem('notionDatabaseIds', JSON.stringify(notionDatabaseIds));
+}
+
+// 加载Notion数据库ID配置
+function loadNotionDatabaseIds() {
+    const saved = localStorage.getItem('notionDatabaseIds');
+    if (saved) {
+        notionDatabaseIds = JSON.parse(saved);
+    }
+}
+
+// 初始化时加载Notion数据库ID配置
+document.addEventListener('DOMContentLoaded', loadNotionDatabaseIds);
+
+// 获取课程表中的所有课程
+async function getCoursesFromNotion() {
+    try {
+        if (!config.notionApiKey || !notionDatabaseIds.courseTable) {
+            alert('未配置Notion API密钥或课程表数据库ID！');
+            return [];
+        }
+
+        const filter = {
+            and: [
+                {
+                    property: '状态',
+                    select: {
+                        equals: '活跃'
+                    }
+                }
+            ]
+        };
+
+        const response = await notionApiCall(`/databases/${notionDatabaseIds.courseTable}/query`, 'POST', { filter });
+
+        if (response && response.results) {
+            return response.results.map(page => {
+                const props = page.properties;
+                return {
+                    id: page.id,
+                    name: props['课程名称']?.title[0]?.text?.content || '',
+                    createdAt: props['创建时间']?.date?.start || new Date().toISOString(),
+                    description: props['简介']?.rich_text[0]?.text?.content || '',
+                    difficulty: props['难度']?.select?.name || '',
+                    modules: props['所属模块']?.multi_select?.map(m => m.name) || [],
+                    chapters: JSON.parse(props['章节列表']?.rich_text[0]?.text?.content || '[]'),
+                    status: props['状态']?.select?.name || '活跃'
+                };
+            });
+        }
+        return [];
+    } catch (error) {
+        console.error('从Notion获取课程失败:', error);
+        alert(`从Notion获取课程失败: ${error.message}`);
+        return [];
+    }
+}
+
+// 将课程保存到Notion课程表
+async function saveCourseToNotion(course) {
+    try {
+        if (!config.notionApiKey || !notionDatabaseIds.courseTable) {
+            alert('未配置Notion API密钥或课程表数据库ID！');
+            return null;
+        }
+
+        const notionData = {
+            parent: {
+                database_id: notionDatabaseIds.courseTable
+            },
+            properties: {
+                '创建时间': {
+                    date: {
+                        start: course.createdAt || new Date().toISOString()
+                    }
+                },
+                '课程名称': {
+                    title: [
+                        {
+                            text: {
+                                content: course.name
+                            }
+                        }
+                    ]
+                },
+                '简介': {
+                    rich_text: [
+                        {
+                            text: {
+                                content: course.description || ''
+                            }
+                        }
+                    ]
+                },
+                '难度': {
+                    select: {
+                        name: course.difficulty || '入门'
+                    }
+                },
+                '所属模块': {
+                    multi_select: (course.modules || []).map(module => ({
+                        name: module
+                    }))
+                },
+                '章节列表': {
+                    rich_text: [
+                        {
+                            text: {
+                                content: JSON.stringify(course.chapters || [])
+                            }
+                        }
+                    ]
+                },
+                '状态': {
+                    select: {
+                        name: course.status || '活跃'
+                    }
+                }
+            }
+        };
+
+        return await notionApiCall('/pages', 'POST', notionData);
+    } catch (error) {
+        console.error('保存课程到Notion失败:', error);
+        alert(`保存课程到Notion失败: ${error.message}`);
+        return null;
+    }
+}
+
+// 更新Notion课程信息
+async function updateCourseInNotion(courseId, updateData) {
+    try {
+        if (!config.notionApiKey) {
+            alert('未配置Notion API密钥！');
+            return null;
+        }
+
+        const notionData = {
+            properties: {}
+        };
+
+        // 根据需要更新的字段构建请求体
+        if (updateData.description !== undefined) {
+            notionData.properties['简介'] = {
+                rich_text: [
+                    {
+                        text: {
+                            content: updateData.description
+                        }
+                    }
+                ]
+            };
+        }
+
+        if (updateData.difficulty !== undefined) {
+            notionData.properties['难度'] = {
+                select: {
+                    name: updateData.difficulty
+                }
+            };
+        }
+
+        if (updateData.modules !== undefined) {
+            notionData.properties['所属模块'] = {
+                multi_select: updateData.modules.map(module => ({
+                    name: module
+                }))
+            };
+        }
+
+        if (updateData.chapters !== undefined) {
+            notionData.properties['章节列表'] = {
+                rich_text: [
+                    {
+                        text: {
+                            content: JSON.stringify(updateData.chapters)
+                        }
+                    }
+                ]
+            };
+        }
+
+        if (updateData.status !== undefined) {
+            notionData.properties['状态'] = {
+                select: {
+                    name: updateData.status
+                }
+            };
+        }
+
+        return await notionApiCall(`/pages/${courseId}`, 'PATCH', notionData);
+    } catch (error) {
+        console.error('更新Notion课程失败:', error);
+        alert(`更新Notion课程失败: ${error.message}`);
+        return null;
+    }
+}
+
+// 删除Notion课程
+async function deleteCourseFromNotion(courseId) {
+    try {
+        if (!config.notionApiKey) {
+            alert('未配置Notion API密钥！');
+            return false;
+        }
+
+        // 软删除：将状态改为"已删除"
+        const result = await updateCourseInNotion(courseId, { status: '已删除' });
+        return result !== null;
+    } catch (error) {
+        console.error('删除Notion课程失败:', error);
+        alert(`删除Notion课程失败: ${error.message}`);
+        return false;
+    }
+}
+
+// 获取学习记录表中的所有学习记录
+async function getLearningRecordsFromNotion() {
+    try {
+        if (!config.notionApiKey || !notionDatabaseIds.learningRecords) {
+            alert('未配置Notion API密钥或学习记录表数据库ID！');
+            return [];
+        }
+
+        const filter = {
+            and: [
+                {
+                    property: '状态',
+                    select: {
+                        equals: '已完成'
+                    }
+                }
+            ]
+        };
+
+        const response = await notionApiCall(`/databases/${notionDatabaseIds.learningRecords}/query`, 'POST', { filter });
+
+        if (response && response.results) {
+            return response.results.map(page => {
+                const props = page.properties;
+                return {
+                    id: page.id,
+                    courseName: props['课程名称']?.select?.name || '',
+                    chapterName: props['章节名称']?.select?.name || '',
+                    startTime: props['学习开始时间']?.date?.start || '',
+                    endTime: props['学习结束时间']?.date?.start || '',
+                    duration: props['学习时长']?.number || 0,
+                    masteryLevel: props['掌握程度']?.select?.name || '',
+                    summary: props['学习摘要']?.rich_text[0]?.text?.content || '',
+                    challenges: props['学习挑战']?.rich_text[0]?.text?.content || '',
+                    status: props['状态']?.select?.name || '已完成'
+                };
+            });
+        }
+        return [];
+    } catch (error) {
+        console.error('从Notion获取学习记录失败:', error);
+        alert(`从Notion获取学习记录失败: ${error.message}`);
+        return [];
+    }
+}
+
+// 将学习记录保存到Notion学习记录表
+async function saveLearningRecordToNotion(record) {
+    try {
+        if (!config.notionApiKey || !notionDatabaseIds.learningRecords) {
+            alert('未配置Notion API密钥或学习记录表数据库ID！');
+            return null;
+        }
+
+        const notionData = {
+            parent: {
+                database_id: notionDatabaseIds.learningRecords
+            },
+            properties: {
+                '学习开始时间': {
+                    date: {
+                        start: record.startTime || new Date().toISOString()
+                    }
+                },
+                '学习结束时间': {
+                    date: {
+                        start: record.endTime || new Date().toISOString()
+                    }
+                },
+                '课程名称': {
+                    select: {
+                        name: record.courseName
+                    }
+                },
+                '章节名称': {
+                    select: {
+                        name: record.chapterName
+                    }
+                },
+                '学习时长': {
+                    number: record.duration || 0
+                },
+                '掌握程度': {
+                    select: {
+                        name: record.masteryLevel || '一般'
+                    }
+                },
+                '学习摘要': {
+                    rich_text: [
+                        {
+                            text: {
+                                content: record.summary || ''
+                            }
+                        }
+                    ]
+                },
+                '学习挑战': {
+                    rich_text: [
+                        {
+                            text: {
+                                content: record.challenges || ''
+                            }
+                        }
+                    ]
+                },
+                '状态': {
+                    select: {
+                        name: record.status || '已完成'
+                    }
+                }
+            }
+        };
+
+        return await notionApiCall('/pages', 'POST', notionData);
+    } catch (error) {
+        console.error('保存学习记录到Notion失败:', error);
+        alert(`保存学习记录到Notion失败: ${error.message}`);
+        return null;
+    }
+}
+
+// 更新Notion学习记录
+async function updateLearningRecordInNotion(recordId, updateData) {
+    try {
+        if (!config.notionApiKey) {
+            alert('未配置Notion API密钥！');
+            return null;
+        }
+
+        const notionData = {
+            properties: {}
+        };
+
+        // 根据需要更新的字段构建请求体
+        if (updateData.endTime !== undefined) {
+            notionData.properties['学习结束时间'] = {
+                date: {
+                    start: updateData.endTime
+                }
+            };
+        }
+
+        if (updateData.duration !== undefined) {
+            notionData.properties['学习时长'] = {
+                number: updateData.duration
+            };
+        }
+
+        if (updateData.masteryLevel !== undefined) {
+            notionData.properties['掌握程度'] = {
+                select: {
+                    name: updateData.masteryLevel
+                }
+            };
+        }
+
+        if (updateData.summary !== undefined) {
+            notionData.properties['学习摘要'] = {
+                rich_text: [
+                    {
+                        text: {
+                            content: updateData.summary
+                        }
+                    }
+                ]
+            };
+        }
+
+        if (updateData.challenges !== undefined) {
+            notionData.properties['学习挑战'] = {
+                rich_text: [
+                    {
+                        text: {
+                            content: updateData.challenges
+                        }
+                    }
+                ]
+            };
+        }
+
+        if (updateData.status !== undefined) {
+            notionData.properties['状态'] = {
+                select: {
+                    name: updateData.status
+                }
+            };
+        }
+
+        return await notionApiCall(`/pages/${recordId}`, 'PATCH', notionData);
+    } catch (error) {
+        console.error('更新Notion学习记录失败:', error);
+        alert(`更新Notion学习记录失败: ${error.message}`);
+        return null;
+    }
+}
+
+// 获取复习情况表中的所有复习记录
+async function getReviewRecordsFromNotion() {
+    try {
+        if (!config.notionApiKey || !notionDatabaseIds.reviewRecords) {
+            alert('未配置Notion API密钥或复习情况表数据库ID！');
+            return [];
+        }
+
+        const filter = {
+            and: [
+                {
+                    property: '状态',
+                    select: {
+                        equals: '已完成'
+                    }
+                }
+            ]
+        };
+
+        const response = await notionApiCall(`/databases/${notionDatabaseIds.reviewRecords}/query`, 'POST', { filter });
+
+        if (response && response.results) {
+            return response.results.map(page => {
+                const props = page.properties;
+                return {
+                    id: page.id,
+                    courseName: props['课程名称']?.select?.name || '',
+                    chapterName: props['章节名称']?.select?.name || '',
+                    reviewDate: props['复习日期']?.date?.start || '',
+                    reviewMethod: props['复习方式']?.select?.name || '',
+                    reviewDuration: props['复习时长']?.number || 0,
+                    reviewEffect: props['复习效果']?.select?.name || '',
+                    assessmentResult: props['评估结果']?.rich_text[0]?.text?.content || '',
+                    masteryLevel: props['掌握程度']?.select?.name || '',
+                    nextReviewDate: props['下次复习日期']?.date?.start || '',
+                    status: props['状态']?.select?.name || '已完成'
+                };
+            });
+        }
+        return [];
+    } catch (error) {
+        console.error('从Notion获取复习记录失败:', error);
+        alert(`从Notion获取复习记录失败: ${error.message}`);
+        return [];
+    }
+}
+
+// 将复习记录保存到Notion复习情况表
+async function saveReviewRecordToNotion(record) {
+    try {
+        if (!config.notionApiKey || !notionDatabaseIds.reviewRecords) {
+            alert('未配置Notion API密钥或复习情况表数据库ID！');
+            return null;
+        }
+
+        const notionData = {
+            parent: {
+                database_id: notionDatabaseIds.reviewRecords
+            },
+            properties: {
+                '复习日期': {
+                    date: {
+                        start: record.reviewDate || new Date().toISOString()
+                    }
+                },
+                '课程名称': {
+                    select: {
+                        name: record.courseName
+                    }
+                },
+                '章节名称': {
+                    select: {
+                        name: record.chapterName
+                    }
+                },
+                '复习方式': {
+                    select: {
+                        name: record.reviewMethod || '习题'
+                    }
+                },
+                '复习时长': {
+                    number: record.reviewDuration || 0
+                },
+                '复习效果': {
+                    select: {
+                        name: record.reviewEffect || '一般'
+                    }
+                },
+                '评估结果': {
+                    rich_text: [
+                        {
+                            text: {
+                                content: record.assessmentResult || ''
+                            }
+                        }
+                    ]
+                },
+                '掌握程度': {
+                    select: {
+                        name: record.masteryLevel || '一般'
+                    }
+                },
+                '下次复习日期': {
+                    date: {
+                        start: record.nextReviewDate || new Date().toISOString()
+                    }
+                },
+                '状态': {
+                    select: {
+                        name: record.status || '已完成'
+                    }
+                }
+            }
+        };
+
+        return await notionApiCall('/pages', 'POST', notionData);
+    } catch (error) {
+        console.error('保存复习记录到Notion失败:', error);
+        alert(`保存复习记录到Notion失败: ${error.message}`);
+        return null;
+    }
+}
+
+// 计算下一次复习日期
+function calculateNextReviewDate(lastDate, masteryLevel) {
+    const date = new Date(lastDate);
+    const masteryDays = {
+        '低': 1,
+        '一般': 3,
+        '好': 7,
+        '很好': 14,
+        '优秀': 30
+    };
+    
+    // 根据掌握程度计算复习间隔天数
+    const daysToAdd = masteryDays[masteryLevel] || 3;
+    
+    // 添加天数
+    date.setDate(date.getDate() + daysToAdd);
+    
+    // 返回ISO格式的日期字符串
+    return date.toISOString();
+}
+
+// 更新Notion复习情况表中的复习记录
+async function updateReviewRecordInNotion(recordId, updateData) {
+    try {
+        if (!config.notionApiKey) {
+            alert('未配置Notion API密钥！');
+            return null;
+        }
+
+        const notionData = {
+            properties: {}
+        };
+
+        // 根据需要更新的字段构建请求体
+        if (updateData.reviewDate !== undefined) {
+            notionData.properties['复习日期'] = {
+                date: {
+                    start: updateData.reviewDate
+                }
+            };
+        }
+
+        if (updateData.reviewMethod !== undefined) {
+            notionData.properties['复习方式'] = {
+                select: {
+                    name: updateData.reviewMethod
+                }
+            };
+        }
+
+        if (updateData.reviewDuration !== undefined) {
+            notionData.properties['复习时长'] = {
+                number: updateData.reviewDuration
+            };
+        }
+
+        if (updateData.reviewEffect !== undefined) {
+            notionData.properties['复习效果'] = {
+                select: {
+                    name: updateData.reviewEffect
+                }
+            };
+        }
+
+        if (updateData.assessmentResult !== undefined) {
+            notionData.properties['评估结果'] = {
+                rich_text: [
+                    {
+                        text: {
+                            content: updateData.assessmentResult
+                        }
+                    }
+                ]
+            };
+        }
+
+        if (updateData.masteryLevel !== undefined) {
+            notionData.properties['掌握程度'] = {
+                select: {
+                    name: updateData.masteryLevel
+                }
+            };
+        }
+
+        if (updateData.nextReviewDate !== undefined) {
+            notionData.properties['下次复习日期'] = {
+                date: {
+                    start: updateData.nextReviewDate
+                }
+            };
+        }
+
+        if (updateData.status !== undefined) {
+            notionData.properties['状态'] = {
+                select: {
+                    name: updateData.status
+                }
+            };
+        }
+
+        return await notionApiCall(`/pages/${recordId}`, 'PATCH', notionData);
+    } catch (error) {
+        console.error('更新Notion复习记录失败:', error);
+        alert(`更新Notion复习记录失败: ${error.message}`);
+        return null;
+    }
+}
+
+// 同步学习进度到Notion（旧的API，兼容原有功能）
 async function syncProgressToNotion(progressData) {
     if (!config.notionDatabaseId) {
         alert('未配置Notion数据库ID！');
@@ -547,8 +1318,18 @@ function loadConfig() {
         if (document.getElementById('notion-api-key')) {
             document.getElementById('notion-api-key').value = config.notionApiKey;
         }
-        if (document.getElementById('notion-database-id')) {
-            document.getElementById('notion-database-id').value = config.notionDatabaseId;
+        // 加载三个数据库ID
+        if (document.getElementById('notion-course-db-id')) {
+            document.getElementById('notion-course-db-id').value = notionDatabaseIds.courseTable;
+        }
+        if (document.getElementById('notion-learning-db-id')) {
+            document.getElementById('notion-learning-db-id').value = notionDatabaseIds.learningRecords;
+        }
+        if (document.getElementById('notion-review-db-id')) {
+            document.getElementById('notion-review-db-id').value = notionDatabaseIds.reviewRecords;
+        }
+        if (document.getElementById('notion-proxy-url')) {
+            document.getElementById('notion-proxy-url').value = config.notionProxyUrl || '';
         }
         if (document.getElementById('webhook-url')) {
             document.getElementById('webhook-url').value = config.webhookUrl;
@@ -576,8 +1357,20 @@ function saveConfig() {
     if (document.getElementById('notion-api-key')) {
         config.notionApiKey = document.getElementById('notion-api-key').value;
     }
-    if (document.getElementById('notion-database-id')) {
-        config.notionDatabaseId = document.getElementById('notion-database-id').value;
+    // 保存三个数据库ID
+    if (document.getElementById('notion-course-db-id')) {
+        notionDatabaseIds.courseTable = document.getElementById('notion-course-db-id').value;
+    }
+    if (document.getElementById('notion-learning-db-id')) {
+        notionDatabaseIds.learningRecords = document.getElementById('notion-learning-db-id').value;
+    }
+    if (document.getElementById('notion-review-db-id')) {
+        notionDatabaseIds.reviewRecords = document.getElementById('notion-review-db-id').value;
+    }
+    // 保存数据库ID配置
+    saveNotionDatabaseIds();
+    if (document.getElementById('notion-proxy-url')) {
+        config.notionProxyUrl = document.getElementById('notion-proxy-url').value;
     }
     if (document.getElementById('webhook-url')) {
         config.webhookUrl = document.getElementById('webhook-url').value;
@@ -1092,11 +1885,47 @@ async function sendMessage() {
             }).filter(Boolean);
             
             if (courses.length > 0) {
-                courseProgress.availableCourses = courses;
-                await saveCourseProgress();
-                // 不自动显示课程选择界面，让用户可以继续与AI对话
-                displayMessage('assistant', '\n\n如果您想开始学习这些课程，可以点击页面上方的"学习课程"按钮进入课程选择界面。');
+            courseProgress.availableCourses = courses;
+            await saveCourseProgress();
+            
+            // 将生成的课程保存到Notion课程表
+            if (config.notionApiKey && notionDatabaseIds.courseTable) {
+                try {
+                    // 先检查Notion中是否已存在相同名称的课程
+                    const existingCourses = await getCoursesFromNotion();
+                    const existingCourseNames = new Set(existingCourses.map(c => c.name.toLowerCase()));
+                    
+                    // 只保存新的课程
+                    const newCourses = courses.filter(course => !existingCourseNames.has(course.name.toLowerCase()));
+                    
+                    for (const course of newCourses) {
+                        // 将课程转换为Notion格式并保存
+                        const notionCourse = {
+                            name: course.name,
+                            createdAt: new Date().toISOString(),
+                            description: course.description,
+                            difficulty: course.difficulty,
+                            modules: course.modules,
+                            chapters: [] // 初始章节列表为空，后续可以通过编辑功能添加
+                        };
+                        
+                        await saveCourseToNotion(notionCourse);
+                    }
+                    
+                    if (newCourses.length > 0) {
+                        console.log(`成功将 ${newCourses.length} 门课程保存到Notion课程表！`);
+                    } else {
+                        console.log('所有课程已存在于Notion课程表中。');
+                    }
+                } catch (error) {
+                    console.error('保存课程到Notion失败:', error);
+                    // 不影响主流程，只记录错误
+                }
             }
+            
+            // 不自动显示课程选择界面，让用户可以继续与AI对话
+            displayMessage('assistant', '\n\n如果您想开始学习这些课程，可以点击页面上方的"学习课程"按钮进入课程选择界面。');
+        }
         } else {
             // 如果API调用失败，显示错误信息
             const errorMessage = '很抱歉，我暂时无法生成课程列表。请检查API配置或稍后重试。';
@@ -1174,30 +2003,78 @@ async function generateReviewPlan() {
     // 构建个性化学习数据
     const today = new Date().toISOString();
     
+    // 从Notion学习记录表中获取学习数据
+    let learningRecords = [];
+    if (config.notionApiKey && notionDatabaseIds.learningRecords) {
+        learningRecords = await getLearningRecordsFromNotion();
+    } else {
+        // 如果Notion不可用，回退到本地数据
+        learningRecords = courseProgress.learningHistory || [];
+    }
+    
     // 筛选与输入科目相关的学习数据
-    const relevantCourses = courseProgress.coursesLearned?.filter(course => 
-        course.name.includes(subject) || 
-        Object.values(course.moduleMastery || {}).some(module => module.name.includes(subject))
-    ) || [];
+    const relevantRecords = learningRecords.filter(record => 
+        record.courseName.includes(subject) || record.chapterName.includes(subject)
+    );
     
     // 收集相关模块数据
     const relevantModules = [];
-    relevantCourses.forEach(course => {
-        if (course.moduleMastery) {
-            Object.values(course.moduleMastery).forEach(module => {
-                relevantModules.push({
-                    course: course.name,
-                    module: module.name,
-                    masteryLevel: module.masteryLevel,
-                    lastLearnedDate: module.lastLearnedDate,
-                    learningCount: module.learningCount,
-                    reviewCount: module.reviewCount,
-                    nextReviewDate: module.nextReviewDate,
-                    isOverdue: module.nextReviewDate && module.nextReviewDate <= today
-                });
+    const moduleMap = new Map();
+    
+    relevantRecords.forEach(record => {
+        const key = `${record.courseName}_${record.chapterName}`;
+        if (!moduleMap.has(key)) {
+            moduleMap.set(key, {
+                course: record.courseName,
+                module: record.chapterName,
+                masteryLevel: record.masteryLevel,
+                lastLearnedDate: record.endTime,
+                learningCount: 1,
+                reviewCount: 0,
+                nextReviewDate: calculateNextReviewDate(record.endTime, record.masteryLevel),
+                isOverdue: false
+            });
+        } else {
+            const module = moduleMap.get(key);
+            // 更新学习次数
+            module.learningCount += 1;
+            // 更新最后学习日期
+            if (record.endTime > module.lastLearnedDate) {
+                module.lastLearnedDate = record.endTime;
+                module.masteryLevel = record.masteryLevel;
+                module.nextReviewDate = calculateNextReviewDate(record.endTime, record.masteryLevel);
+            }
+        }
+    });
+    
+    // 将Map转换为数组
+    moduleMap.forEach(module => {
+        module.isOverdue = module.nextReviewDate && module.nextReviewDate <= today;
+        relevantModules.push(module);
+    });
+    
+    // 收集相关课程
+    const courseMap = new Map();
+    relevantRecords.forEach(record => {
+        if (!courseMap.has(record.courseName)) {
+            courseMap.set(record.courseName, {
+                name: record.courseName,
+                moduleMastery: {}
             });
         }
     });
+    
+    // 构建课程模块掌握情况
+    moduleMap.forEach((module, key) => {
+        const [courseName, moduleName] = key.split('_');
+        if (courseMap.has(courseName)) {
+            const course = courseMap.get(courseName);
+            course.moduleMastery[moduleName] = module;
+        }
+    });
+    
+    // 转换为数组
+    const relevantCourses = Array.from(courseMap.values());
     
     // 如果没有直接相关的课程，使用所有学习数据
     const finalCourses = relevantCourses.length > 0 ? relevantCourses : courseProgress.coursesLearned || [];
@@ -1250,6 +2127,10 @@ async function generateReviewPlan() {
     
     if (plan) {
         resultDiv.textContent = plan;
+        
+        // 显示复习方式选择界面
+        const reviewMethodSelection = document.getElementById('review-method-selection');
+        reviewMethodSelection.classList.remove('hidden');
         
         // 发送Webhook通知到集简云
         webhookCall({
@@ -1506,34 +2387,100 @@ async function generateMemoryPoints() {
     resultDiv.textContent = '正在分析学习历史并生成加强记忆的知识点...';
     
     try {
+        // 从Notion获取学习记录和复习记录
+        let learningRecords = [];
+        let reviewRecords = [];
+        
+        if (config.notionApiKey) {
+            // 从Notion学习记录表获取数据
+            if (notionDatabaseIds.learningRecords) {
+                learningRecords = await getLearningRecordsFromNotion();
+            }
+            
+            // 从Notion复习情况表获取数据
+            if (notionDatabaseIds.reviewRecords) {
+                reviewRecords = await getReviewRecordsFromNotion();
+            }
+        }
+        
+        // 如果Notion不可用，回退到本地数据
+        if (learningRecords.length === 0) {
+            learningRecords = courseProgress.learningHistory || [];
+        }
+        
         // 构建个性化学习历史数据
         let learningHistoryData = {
-            learningHistory: courseProgress.learningHistory || [],
-            coursesLearned: courseProgress.coursesLearned || [],
+            learningHistory: learningRecords,
+            reviewRecords: reviewRecords,
             currentDate: new Date().toISOString()
         };
         
-        // 获取需要复习的模块
+        // 获取需要加强记忆的模块
         const modulesToReview = [];
         const today = new Date().toISOString();
+        const moduleMap = new Map();
         
-        if (learningHistoryData.coursesLearned) {
-            learningHistoryData.coursesLearned.forEach(course => {
-                if (course.moduleMastery) {
-                    Object.values(course.moduleMastery).forEach(module => {
-                        if (module.nextReviewDate && module.nextReviewDate <= today) {
-                            modulesToReview.push({
-                                course: course.name,
-                                module: module.name,
-                                masteryLevel: module.masteryLevel,
-                                lastLearnedDate: module.lastLearnedDate,
-                                learningCount: module.learningCount
-                            });
-                        }
-                    });
+        // 处理学习记录
+        learningRecords.forEach(record => {
+            const key = `${record.courseName}_${record.chapterName}`;
+            if (!moduleMap.has(key)) {
+                moduleMap.set(key, {
+                    course: record.courseName,
+                    module: record.chapterName,
+                    masteryLevel: record.masteryLevel,
+                    lastLearnedDate: record.endTime,
+                    learningCount: 1,
+                    reviewCount: 0,
+                    lastReviewDate: null,
+                    reviewEffect: null
+                });
+            } else {
+                const module = moduleMap.get(key);
+                module.learningCount += 1;
+                if (record.endTime > module.lastLearnedDate) {
+                    module.lastLearnedDate = record.endTime;
+                    module.masteryLevel = record.masteryLevel;
                 }
-            });
-        }
+            }
+        });
+        
+        // 处理复习记录
+        reviewRecords.forEach(record => {
+            const key = `${record.courseName}_${record.chapterName}`;
+            if (moduleMap.has(key)) {
+                const module = moduleMap.get(key);
+                module.reviewCount += 1;
+                module.lastReviewDate = record.reviewDate;
+                module.reviewEffect = record.reviewEffect;
+                
+                // 如果复习效果不好，降低掌握程度
+                if (['差', '低'].includes(record.reviewEffect)) {
+                    module.masteryLevel = '低';
+                }
+            }
+        });
+        
+        // 筛选出需要加强记忆的模块
+        moduleMap.forEach(module => {
+            // 掌握程度低的模块
+            if (['低', '差', '一般'].includes(module.masteryLevel)) {
+                modulesToReview.push(module);
+            }
+            // 或者很久没复习的模块
+            else if (module.lastReviewDate) {
+                const daysSinceReview = (new Date(today) - new Date(module.lastReviewDate)) / (1000 * 60 * 60 * 24);
+                if (daysSinceReview > 14) { // 超过14天没复习
+                    modulesToReview.push(module);
+                }
+            }
+            // 或者很久没学习的模块
+            else {
+                const daysSinceLearning = (new Date(today) - new Date(module.lastLearnedDate)) / (1000 * 60 * 60 * 24);
+                if (daysSinceLearning > 30) { // 超过30天没学习
+                    modulesToReview.push(module);
+                }
+            }
+        });
         
         // 获取遗忘曲线提示词
         const forgettingCurve = await getGitHubFile('prompts/forgetting_curve.md');
@@ -1628,7 +2575,7 @@ function showCourseSelection() {
 }
 
 // 显示课程选择下拉框界面
-function showCourseSelectInterface() {
+async function showCourseSelectInterface() {
     // 隐藏所有其他面板
     document.querySelectorAll('.content-panel').forEach(panel => {
         panel.classList.add('hidden');
@@ -1636,8 +2583,42 @@ function showCourseSelectInterface() {
     // 显示课程选择面板
     document.getElementById('course-select-container').classList.remove('hidden');
     
-    // 更新课程下拉框
-    updateCourseDropdown();
+    // 显示加载状态
+    const courseDropdown = document.getElementById('course-dropdown');
+    const originalContent = courseDropdown.innerHTML;
+    courseDropdown.innerHTML = '<option value="" selected disabled>正在加载课程列表...</option>';
+    
+    try {
+        // 从Notion获取最新的课程列表
+        if (config.notionApiKey && notionDatabaseIds.courseTable) {
+            const notionCourses = await getCoursesFromNotion();
+            if (notionCourses.length > 0) {
+                // 将Notion课程转换为本地格式
+                courseProgress.availableCourses = notionCourses.map(course => ({
+                    id: course.id,
+                    name: course.name,
+                    description: course.description,
+                    difficulty: course.difficulty,
+                    modules: course.modules,
+                    chapters: course.chapters || []
+                }));
+                
+                // 保存到本地存储，确保数据持久化
+                await saveCourseProgress();
+            } else {
+                console.log('Notion课程表为空，使用本地课程数据');
+            }
+        } else {
+            console.log('未配置Notion API或课程表数据库ID，使用本地课程数据');
+        }
+        
+        // 更新课程下拉框
+        updateCourseDropdown();
+    } catch (error) {
+        console.error('获取课程列表失败:', error);
+        alert('获取课程列表失败，将使用本地缓存数据');
+        updateCourseDropdown();
+    }
     
     // 添加事件监听
     document.getElementById('back-to-main-btn').onclick = () => {
@@ -1717,7 +2698,7 @@ function updateCourseModuleDropdown() {
     const selectedCourseId = courseDropdown.value;
     
     // 清空现有选项
-    moduleDropdown.innerHTML = '<option value="" selected disabled>请选择模块</option>';
+    moduleDropdown.innerHTML = '<option value="" selected disabled>请选择模块或章节</option>';
     
     if (!selectedCourseId) {
         console.log('没有选择课程');
@@ -1731,6 +2712,25 @@ function updateCourseModuleDropdown() {
     if (!selectedCourse) {
         console.log('未找到选中的课程');
         return;
+    }
+    
+    // 检查是否有章节信息
+    if (selectedCourse.chapters && selectedCourse.chapters.length > 0) {
+        console.log('课程有章节信息，显示章节列表');
+        
+        // 添加章节选项
+        selectedCourse.chapters.forEach((chapter, index) => {
+            const option = document.createElement('option');
+            option.value = chapter.id || `chapter-${index + 1}`;
+            option.textContent = chapter.title || `章节 ${index + 1}`;
+            option.dataset.type = 'chapter';
+            option.dataset.chapterIndex = index;
+            moduleDropdown.appendChild(option);
+        });
+        
+        return; // 直接返回，不显示模块列表
+    } else {
+        console.log('课程没有章节信息，显示模块列表');
     }
     
     // 确保模块数组存在
@@ -1824,8 +2824,19 @@ async function startSelectedCourseLearning() {
         selectedModule = selectedModuleValue;
     }
     
-    // 调用费曼学习法开始学习
-    await startFeynmanLearning(selectedCourse, selectedModule);
+    // 询问用户选择学习方法
+    const learningMethod = prompt('请选择学习方法：\n1. 费曼学习法\n2. 苏格拉底学习法\n\n请输入选项1或2：');
+    
+    if (learningMethod === '1') {
+        // 调用费曼学习法开始学习
+        await startFeynmanLearning(selectedCourse, selectedModule);
+    } else if (learningMethod === '2') {
+        // 调用苏格拉底学习法开始学习
+        await startSocraticLearning(selectedCourse, selectedModule);
+    } else {
+        alert('无效的选择，请重新选择学习方法！');
+        return;
+    }
 }
 
 // 修改startFeynmanLearning函数以支持模块学习
@@ -1938,6 +2949,29 @@ async function startFeynmanLearning(course, module = null) {
         // 保存课程进度
         await saveCourseProgress();
         
+        // 将学习记录保存到Notion学习记录表
+        if (config.notionApiKey && notionDatabaseIds.learningRecords) {
+            try {
+                const learningRecord = {
+                    courseName: course.name,
+                    chapterName: module || '全部内容',
+                    startTime: new Date().toISOString(),
+                    endTime: new Date().toISOString(), // 简单处理，实际应记录学习开始和结束时间
+                    duration: 30, // 默认30分钟，实际应计算学习时长
+                    masteryLevel: '一般', // 初始掌握程度
+                    summary: `使用费曼学习法学习了${course.name}的${module || '全部内容'}`,
+                    challenges: '',
+                    status: '已完成'
+                };
+                
+                await saveLearningRecordToNotion(learningRecord);
+                console.log('学习记录已保存到Notion学习记录表');
+            } catch (error) {
+                console.error('保存学习记录到Notion失败:', error);
+                // 不影响主流程，只记录错误
+            }
+        }
+        
         // 返回对话界面并显示教学内容
         document.querySelectorAll('.content-panel').forEach(panel => {
             panel.classList.add('hidden');
@@ -1954,6 +2988,167 @@ async function startFeynmanLearning(course, module = null) {
         
     } catch (error) {
         console.error('费曼学习法教学失败:', error);
+        alert('生成教学内容失败，请稍后重试。');
+    } finally {
+        // 移除加载状态
+        document.body.removeChild(loadingIndicator);
+    }
+}
+
+// 苏格拉底学习法教学函数
+async function startSocraticLearning(course, module = null) {
+    // 显示加载状态
+    const loadingIndicator = document.createElement('div');
+    loadingIndicator.className = 'loading-indicator';
+    loadingIndicator.textContent = '正在准备苏格拉底学习法教学...';
+    loadingIndicator.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        padding: 20px;
+        background-color: rgba(255, 255, 255, 0.9);
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        font-size: 16px;
+        z-index: 1000;
+    `;
+    document.body.appendChild(loadingIndicator);
+    
+    try {
+        // 生成苏格拉底学习法教学内容
+        let contentPrompt = `请用苏格拉底学习法教我学习：${course.name}。课程简介：${course.description}`;
+        if (module) {
+            contentPrompt += `\n\n具体学习模块/章节：${module}`;
+        }
+        
+        // 从文件读取苏格拉底学习法提示词
+        const socraticTeacherPrompt = await getLocalPromptFile('socratic_learning.md');
+        
+        if (!socraticTeacherPrompt) {
+            // 如果读取失败，使用默认提示词
+            alert('很抱歉，读取苏格拉底学习法提示词失败。请检查prompts目录下的文件是否存在。');
+            return;
+        }
+        
+        // 替换提示词中的变量
+        const formattedPrompt = socraticTeacherPrompt
+            .replace('{courseName}', course.name)
+            .replace('{moduleName}', module || '全部内容');
+        
+        const socraticPrompt = [{
+            role: 'system',
+            content: formattedPrompt
+        }, {
+            role: 'user',
+            content: contentPrompt
+        }];
+        
+        const teachingContent = await tongyiApiCall(socraticPrompt);
+        
+        // 记录学习历史
+        courseProgress.learningHistory.push({
+            course: course.name,
+            courseId: course.id,
+            module: module || '全部内容',
+            date: new Date().toISOString(),
+            content: teachingContent,
+            method: 'socratic',
+            masteryLevel: 1 // 初始掌握度为1（1-5级）
+        });
+        
+        // 更新课程学习进度
+        if (!courseProgress.coursesLearned) {
+            courseProgress.coursesLearned = [];
+        }
+        
+        const existingCourse = courseProgress.coursesLearned.find(c => c.id === course.id);
+        if (!existingCourse) {
+            courseProgress.coursesLearned.push({
+                id: course.id,
+                name: course.name,
+                difficulty: course.difficulty,
+                firstLearnedDate: new Date().toISOString(),
+                lastLearnedDate: new Date().toISOString(),
+                learningCount: 1,
+                moduleMastery: {} // 添加模块掌握度跟踪
+            });
+        } else {
+            existingCourse.lastLearnedDate = new Date().toISOString();
+            existingCourse.learningCount = (existingCourse.learningCount || 0) + 1;
+            // 初始化模块掌握度对象
+            if (!existingCourse.moduleMastery) {
+                existingCourse.moduleMastery = {};
+            }
+        }
+        
+        // 更新模块掌握度
+        if (module) {
+            const courseInProgress = courseProgress.coursesLearned.find(c => c.id === course.id);
+            if (!courseInProgress.moduleMastery[module]) {
+                courseInProgress.moduleMastery[module] = {
+                    name: module,
+                    lastLearnedDate: new Date().toISOString(),
+                    learningCount: 1,
+                    masteryLevel: 1, // 1-5级，5级为完全掌握
+                    reviewCount: 0,
+                    nextReviewDate: calculateNextReviewDate(1) // 基于掌握度计算下次复习日期
+                };
+            } else {
+                const moduleMastery = courseInProgress.moduleMastery[module];
+                moduleMastery.lastLearnedDate = new Date().toISOString();
+                moduleMastery.learningCount++;
+                // 根据学习次数和时间间隔提升掌握度（简单规则）
+                if (moduleMastery.masteryLevel < 5) {
+                    moduleMastery.masteryLevel += 0.5;
+                    if (moduleMastery.masteryLevel > 5) moduleMastery.masteryLevel = 5;
+                }
+                moduleMastery.nextReviewDate = calculateNextReviewDate(moduleMastery.masteryLevel);
+            }
+        }
+        
+        // 保存课程进度
+        await saveCourseProgress();
+        
+        // 将学习记录保存到Notion学习记录表
+        if (config.notionApiKey && notionDatabaseIds.learningRecords) {
+            try {
+                const learningRecord = {
+                    courseName: course.name,
+                    chapterName: module || '全部内容',
+                    startTime: new Date().toISOString(),
+                    endTime: new Date().toISOString(), // 简单处理，实际应记录学习开始和结束时间
+                    duration: 30, // 默认30分钟，实际应计算学习时长
+                    masteryLevel: '一般', // 初始掌握程度
+                    summary: `使用苏格拉底学习法学习了${course.name}的${module || '全部内容'}`,
+                    challenges: '',
+                    status: '已完成'
+                };
+                
+                await saveLearningRecordToNotion(learningRecord);
+                console.log('学习记录已保存到Notion学习记录表');
+            } catch (error) {
+                console.error('保存学习记录到Notion失败:', error);
+                // 不影响主流程，只记录错误
+            }
+        }
+        
+        // 返回对话界面并显示教学内容
+        document.querySelectorAll('.content-panel').forEach(panel => {
+            panel.classList.add('hidden');
+        });
+        document.getElementById('chat-container').classList.remove('hidden');
+        
+        // 显示教学内容
+        displayMessage('assistant', teachingContent);
+        
+        // 添加到对话历史
+        let conversation = await loadTodaysConversation();
+        conversation.push({ role: 'assistant', content: teachingContent });
+        await saveTodaysConversation(conversation);
+        
+    } catch (error) {
+        console.error('苏格拉底学习法教学失败:', error);
         alert('生成教学内容失败，请稍后重试。');
     } finally {
         // 移除加载状态
@@ -3028,7 +4223,7 @@ document.addEventListener('DOMContentLoaded', () => {
         displayPendingReviewTopics();
     });
     document.getElementById('prompts-btn').addEventListener('click', () => switchPanel('prompts-container'));
-    document.getElementById('select-course-btn').addEventListener('click', () => showCourseSelectInterface());
+    document.getElementById('select-course-btn').addEventListener('click', async () => await showCourseSelectInterface());
     
     // 功能按钮事件
     document.getElementById('generate-plan-btn').addEventListener('click', generateReviewPlan);
