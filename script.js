@@ -56,26 +56,43 @@ async function saveCourseProgressToGitHub() {
             return false;
         }
         
-        // 确保courseList目录存在
-        const directoryExists = await ensureGitHubDirectory('courseList');
-        if (!directoryExists) {
-            console.error('无法创建courseList目录');
-            return false;
-        }
+        console.log('尝试保存课程进度到GitHub...');
         
         // 保存到GitHub的courseList目录
         const filePath = 'courseList/courseProgress.json';
         const content = JSON.stringify(courseProgress, null, 2);
         const message = `Update course progress - ${new Date().toISOString()}`;
         
-        const success = await saveGitHubFile(filePath, content, message);
+        // 首先尝试直接保存文件（GitHub API通常会自动创建目录）
+        let success = await saveGitHubFile(filePath, content, message);
         if (success) {
-            console.log('课程进度已保存到GitHub');
+            console.log('课程进度已保存到GitHub:', filePath);
             return true;
-        } else {
-            console.error('保存课程进度到GitHub失败');
-            return false;
         }
+        
+        console.error('直接保存失败，尝试分步创建目录和文件...');
+        
+        // 第一步：确保conversations目录存在（参考已验证的工作方式）
+        const todayFile = getTodayFilename();
+        const testConversationPath = `conversations/${todayFile}`;
+        const testContent = JSON.stringify([], null, 2);
+        const testMessage = `Test directory creation - ${new Date().toISOString()}`;
+        
+        // 尝试保存一个空的对话文件来确保目录结构正常
+        const testSaveSuccess = await saveGitHubFile(testConversationPath, testContent, testMessage);
+        if (testSaveSuccess) {
+            console.log('测试对话文件保存成功，目录结构正常');
+        }
+        
+        // 第二步：再次尝试保存课程进度文件
+        success = await saveGitHubFile(filePath, content, message);
+        if (success) {
+            console.log('课程进度已保存到GitHub:', filePath);
+            return true;
+        }
+        
+        console.error('保存课程进度到GitHub失败');
+        return false;
     } catch (error) {
         console.error('保存课程进度到GitHub时发生错误:', error);
         return false;
@@ -771,14 +788,22 @@ function markdownToHtml(markdown) {
 async function sendMessage() {
     const messageInput = document.getElementById('message-input');
     const userMessage = messageInput.value.trim();
+    const loadingIndicator = document.getElementById('loading-indicator');
     
     if (!userMessage) return;
+    
+    // 显示加载状态
+    if (loadingIndicator) {
+        loadingIndicator.classList.remove('hidden');
+    }
     
     // 清空输入框
     messageInput.value = '';
     
     // 显示用户消息
     displayMessage('user', userMessage);
+    
+    try {
     
     // 加载对话历史
     let conversation = await loadTodaysConversation();
@@ -900,6 +925,28 @@ async function sendMessage() {
             displayMessage('assistant', errorMessage);
             conversation.push({ role: 'assistant', content: errorMessage });
             await saveTodaysConversation(conversation);
+        }
+    }
+    } catch (error) {
+        console.error('发送消息失败:', error);
+        const errorMessage = '很抱歉，处理消息时发生错误，请重试';
+        displayMessage('assistant', errorMessage);
+        
+        // 保存错误消息到对话历史
+        let conversation = await loadTodaysConversation();
+        conversation.push({ role: 'assistant', content: errorMessage });
+        await saveTodaysConversation(conversation);
+    } finally {
+        // 隐藏加载状态
+        const loadingIndicator = document.getElementById('loading-indicator');
+        if (loadingIndicator) {
+            loadingIndicator.classList.add('hidden');
+        }
+        
+        // 确保对话面板可见
+        const chatContainer = document.getElementById('chat-container');
+        if (chatContainer && chatContainer.classList.contains('hidden')) {
+            chatContainer.classList.remove('hidden');
         }
     }
 }
@@ -1464,28 +1511,64 @@ function updateCourseModuleDropdown() {
     moduleDropdown.innerHTML = '<option value="" selected disabled>请选择模块</option>';
     
     if (!selectedCourseId) {
+        console.log('没有选择课程');
         return;
     }
     
-    // 从课程数据中获取模块
-    const selectedCourse = courseProgress.availableCourses.find(course => course.id === selectedCourseId);
-    if (!selectedCourse || !selectedCourse.modules || selectedCourse.modules.length === 0) {
+    // 从课程数据中获取模块（确保ID比较为字符串类型）
+    const selectedCourse = courseProgress.availableCourses.find(course => String(course.id) === selectedCourseId);
+    console.log('选中的课程:', selectedCourse);
+    
+    if (!selectedCourse) {
+        console.log('未找到选中的课程');
         return;
     }
+    
+    // 确保模块数组存在
+    if (!selectedCourse.modules || selectedCourse.modules.length === 0) {
+        console.log('课程没有模块数据，创建默认模块');
+        // 为课程创建默认模块
+        if (selectedCourse.difficulty === '初级') {
+            selectedCourse.modules = ['基础知识', '概念理解', '简单应用'];
+        } else if (selectedCourse.difficulty === '中级') {
+            selectedCourse.modules = ['核心原理', '实践应用', '案例分析'];
+        } else if (selectedCourse.difficulty === '高级') {
+            selectedCourse.modules = ['高级特性', '深入理解', '综合应用', '优化技巧'];
+        } else {
+            selectedCourse.modules = ['默认模块1', '默认模块2', '默认模块3'];
+        }
+        
+        // 保存更新后的课程数据
+        saveCourseProgress().catch(error => console.error('保存课程数据失败:', error));
+    }
+    
+    // 清除现有的选项（除了第一个默认选项）
+    moduleDropdown.innerHTML = '<option value="" selected disabled>请选择模块</option>';
     
     // 使用课程自带的模块列表
-    selectedCourse.modules.forEach((module, index) => {
-        const option = document.createElement('option');
-        option.value = index + 1;
-        option.textContent = module;
-        moduleDropdown.appendChild(option);
-    });
+    if (selectedCourse.modules && selectedCourse.modules.length > 0) {
+        console.log('可用模块:', selectedCourse.modules);
+        
+        selectedCourse.modules.forEach((module, index) => {
+            const option = document.createElement('option');
+            option.value = module; // 使用模块名称作为值，更直观
+            option.textContent = module;
+            moduleDropdown.appendChild(option);
+            console.log('添加模块选项:', module);
+        });
+        
+        // 添加自定义模块按钮
+        const customOption = document.createElement('option');
+        customOption.value = 'custom';
+        customOption.textContent = '自定义模块...';
+        moduleDropdown.appendChild(customOption);
+        
+        console.log('模块下拉框已更新，共', moduleDropdown.options.length, '个选项');
+    } else {
+        console.log('模块列表为空，无法添加选项');
+    }
     
-    // 添加自定义模块按钮
-    const customOption = document.createElement('option');
-    customOption.value = 'custom';
-    customOption.textContent = '自定义模块...';
-    moduleDropdown.appendChild(customOption);
+    console.log('模块下拉框更新完成');
 }
 
 // 开始学习选定的课程
@@ -1507,7 +1590,7 @@ async function startSelectedCourseLearning() {
         return;
     }
     
-    let selectedModule = moduleDropdown.options[moduleDropdown.selectedIndex].textContent;
+    let selectedModule;
     
     // 处理用户选择自定义模块的情况
     if (selectedModuleValue === 'custom') {
@@ -1527,6 +1610,9 @@ async function startSelectedCourseLearning() {
             // 更新模块下拉框
             updateCourseModuleDropdown();
         }
+    } else {
+        // 直接使用模块值作为模块名称
+        selectedModule = selectedModuleValue;
     }
     
     // 调用费曼学习法开始学习
