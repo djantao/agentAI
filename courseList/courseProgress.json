@@ -9,7 +9,11 @@
       "name": "Paimon基础概念",
       "description": "了解Paimon的定义、特点及核心功能，建立学习基础",
       "difficulty": "初级  ",
-      "modules": []
+      "modules": [
+        "默认模块1",
+        "默认模块2",
+        "默认模块3"
+      ]
     },
     {
       "id": "2",
