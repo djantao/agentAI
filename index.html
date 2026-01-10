@@ -29,8 +29,11 @@
                     <option value="modern">现代风格</option>
                 </select>
                 <!-- Notion集成配置 -->
-                <input type="text" id="notion-api-key" placeholder="Notion API Key" style="width: 200px;">
-                <input type="text" id="notion-database-id" placeholder="Notion数据库ID" style="width: 200px;">
+                <input type="text" id="notion-api-key" placeholder="Notion API Key（不使用代理时需要）" style="width: 250px;">
+                <input type="text" id="notion-course-db-id" placeholder="课程表数据库ID" style="width: 200px;">
+                <input type="text" id="notion-learning-db-id" placeholder="学习记录表数据库ID" style="width: 200px;">
+                <input type="text" id="notion-review-db-id" placeholder="复习情况表数据库ID" style="width: 200px;">
+                <input type="text" id="notion-proxy-url" placeholder="Notion代理地址" style="width: 200px;">
                 <!-- 集简云Webhook配置 -->
                 <input type="text" id="webhook-url" placeholder="集简云Webhook URL" style="width: 250px;">
                 <button id="save-config">保存配置</button>
@@ -113,6 +116,39 @@
                     </div>
                     <button id="generate-plan-btn">生成复习计划</button>
                     <div id="review-plan-result"></div>
+                    
+                    <!-- 复习方式选择 -->
+                    <div id="review-method-selection" class="hidden">
+                        <h4>选择复习方式</h4>
+                        <div class="form-group">
+                            <label for="review-method">复习方式：</label>
+                            <select id="review-method" class="form-control">
+                                <option value="习题">做习题</option>
+                                <option value="输出">做输出</option>
+                            </select>
+                        </div>
+                        <button id="start-review-btn">开始复习</button>
+                    </div>
+                    
+                    <!-- 复习评估 -->
+                    <div id="review-assessment" class="hidden">
+                        <h4>复习评估</h4>
+                        <div class="form-group">
+                            <label for="review-effect">复习效果：</label>
+                            <select id="review-effect" class="form-control">
+                                <option value="差">差</option>
+                                <option value="一般" selected>一般</option>
+                                <option value="好">好</option>
+                                <option value="很好">很好</option>
+                                <option value="优秀">优秀</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="assessment-result">评估结果：</label>
+                            <textarea id="assessment-result" class="form-control" rows="3" placeholder="请输入您的复习评估结果..."></textarea>
+                        </div>
+                        <button id="save-review-btn">保存复习记录</button>
+                    </div>
                 </div>
 
                 <div id="exercise-container" class="content-panel hidden">
