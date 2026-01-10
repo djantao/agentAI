@@ -17,7 +17,11 @@
       "name": "ClickHouse基础概念",
       "description": "了解ClickHouse的基本架构和核心功能，为后续学习打下基础",
       "difficulty": "初级  ",
-      "modules": []
+      "modules": [
+        "默认模块1",
+        "默认模块2",
+        "默认模块3"
+      ]
     },
     {
       "id": "2",
