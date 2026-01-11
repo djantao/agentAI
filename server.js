@@ -1,73 +1,73 @@
-// 简单的HTTP服务器，用于提供静态文件服务
-const http = require('http');
-const fs = require('fs');
+// 学习平台服务器，支持静态文件服务和API代理
+const express = require('express');
+const cors = require('cors');
 const path = require('path');
+const fetch = require('node-fetch');
+require('dotenv').config();
 
 // 服务器配置
 const PORT = 3001;
 const PUBLIC_DIR = __dirname;
 
-// MIME类型映射
-const mimeTypes = {
-  '.html': 'text/html',
-  '.js': 'text/javascript',
-  '.css': 'text/css',
-  '.json': 'application/json',
-  '.png': 'image/png',
-  '.jpg': 'image/jpg',
-  '.gif': 'image/gif',
-  '.svg': 'image/svg+xml',
-  '.wav': 'audio/wav',
-  '.mp4': 'video/mp4',
-  '.woff': 'application/font-woff',
-  '.ttf': 'application/font-ttf',
-  '.eot': 'application/vnd.ms-fontobject',
-  '.otf': 'application/font-otf',
-  '.wasm': 'application/wasm'
-};
+// 创建Express应用
+const app = express();
 
-// 创建HTTP服务器
-const server = http.createServer((req, res) => {
-  console.log(`${req.method} ${req.url}`);
+// 启用CORS
+app.use(cors());
 
-  // 解析请求URL
-  const parsedUrl = new URL(req.url, `http://localhost:${PORT}`);
-  let pathname = parsedUrl.pathname;
+// 解析JSON请求体
+app.use(express.json());
 
-  // 如果路径为空或为根目录，默认返回index.html
-  if (pathname === '/' || pathname === '') {
-    pathname = '/index.html';
-  }
+// 静态文件服务
+app.use(express.static(PUBLIC_DIR));
 
-  // 构建文件路径
-  const filePath = path.join(PUBLIC_DIR, pathname);
+// 默认路由返回index.html
+app.get('/', (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+});
 
-  // 获取文件扩展名
-  const extname = String(path.extname(filePath)).toLowerCase();
-  const contentType = mimeTypes[extname] || 'application/octet-stream';
-
-  // 读取并返回文件
-  fs.readFile(filePath, (error, content) => {
-    if (error) {
-      if (error.code === 'ENOENT') {
-        // 文件不存在，返回404
-        res.writeHead(404, { 'Content-Type': 'text/html' });
-        res.end('<h1>404 Not Found</h1>', 'utf-8');
-      } else {
-        // 服务器错误
-        res.writeHead(500);
-        res.end(`Server Error: ${error.code}`, 'utf-8');
-      }
-    } else {
-      // 文件存在，返回文件内容
-      res.writeHead(200, { 'Content-Type': contentType });
-      res.end(content, 'utf-8');
+// Notion API代理路由
+app.all('/api/notion/*', async (req, res) => {
+  try {
+    // 获取Notion API密钥
+    const notionApiKey = process.env.NOTION_API_KEY;
+    if (!notionApiKey) {
+      return res.status(500).json({ error: 'Notion API密钥未配置，请检查.env文件' });
     }
-  });
+
+    // 构建Notion API请求URL
+    const notionEndpoint = req.originalUrl.replace('/api/notion', '');
+    const notionUrl = `https://api.notion.com/v1${notionEndpoint}`;
+    console.log(`转发请求到Notion API: ${notionUrl}`);
+
+    // 构建请求头
+    const headers = {
+      'Authorization': `Bearer ${notionApiKey}`,
+      'Content-Type': 'application/json',
+      'Notion-Version': '2022-06-28'
+    };
+
+    // 发送请求到Notion API
+    const response = await fetch(notionUrl, {
+      method: req.method,
+      headers,
+      body: req.method !== 'GET' && req.method !== 'DELETE' ? JSON.stringify(req.body) : undefined
+    });
+
+    // 获取响应内容
+    const data = await response.json();
+
+    // 返回响应给前端
+    res.status(response.status).json(data);
+  } catch (error) {
+    console.error('Notion API代理错误:', error);
+    res.status(500).json({ error: 'Notion API代理错误: ' + error.message });
+  }
 });
 
 // 启动服务器
-server.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}/`);
-  console.log(`You can now access the learning platform at the above URL.`);
+app.listen(PORT, () => {
+  console.log(`服务器运行在 http://localhost:${PORT}/`);
+  console.log(`您可以通过上述URL访问学习平台。`);
+  console.log(`Notion API代理已配置，使用 /api/notion 前缀访问。`);
 });
