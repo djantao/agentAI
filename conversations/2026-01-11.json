@@ -81,10 +81,10 @@
   },
   {
     "role": "user",
-    "content": "我想学习sparksql"
+    "content": "入门\n为了学习sparksql源码"
   },
   {
     "role": "assistant",
-    "content": "通义千问API调用失败: 代理服务错误: 404 API路由不存在。请检查本地服务器配置。"
+    "content": "为了学习 Spark SQL 源码，建议按照以下步骤进行系统性入门：\n\n1. **打基础**  \n   - 了解 Spark Core 的核心概念（RDD、DAG 调度、Shuffle 等）  \n   - 掌握 Scala/Python 编程语言（推荐使用 Scala 更利于源码阅读）  \n   - 熟悉基本的 SQL 语法和数据库原理\n\n2. **学 API**  \n   - 学习 DataFrame 和 Dataset API（基于 SQL 的编程接口）  \n   - 使用 `spark.sql()` 执行 SQL 查询与 API 调用的对比实践\n\n3. **看优化**  \n   - 重点学习 Catalyst 优化器（逻辑计划解析、优化规则）  \n   - Tungsten 内存与执行优化机制  \n   - Shuffle 分区与 Join 策略调优\n\n4. **读源码**  \n   - 入门后开始阅读 Spark SQL 核心模块源码  \n   - 结合日志与 Spark UI 观察执行流程  \n   - 从 SQL 解析到物理执行全过程跟踪\n\n5. **做项目**  \n   - 实际开发一个数据处理项目应用所学知识  \n   - 可结合 Structured Streaming 或 Hive 优化案例实战\n\n通过“理论 → 实践 → 源码 → 项目”四步法，可高效掌握 Spark SQL。"
   }
 ]
